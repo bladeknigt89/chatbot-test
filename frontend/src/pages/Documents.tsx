@@ -62,7 +62,7 @@ export default function Documents() {
         <DocumentDropzone
           ref={dropzoneRef}
           disabled={!agentId}
-          hint={agentId ? "Több fájl is kiválasztható egyszerre, fájlonként maximum 50 MB." : "Először hozzon létre egy agentet."}
+          hint={agentId ? "Több fájl is kiválasztható egyszerre, fájlonként maximum 500 MB." : "Először hozzon létre egy agentet."}
           onFiles={upload}
         />
       </div>

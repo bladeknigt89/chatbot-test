@@ -36,7 +36,7 @@ describe("document dropzone", () => {
   it("renders a visible upload button", () => {
     const html = renderToStaticMarkup(createElement(DocumentDropzone, { onFiles: () => undefined }));
     expect(html).toContain("Feltöltés");
-    expect(html).toContain("50 MB");
+    expect(html).toContain("500 MB");
     expect(html).toContain('type="file"');
   });
 });

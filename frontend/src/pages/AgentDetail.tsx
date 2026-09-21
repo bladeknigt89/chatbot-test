@@ -141,7 +141,7 @@ export default function AgentDetail() {
         </form>
         <div className="card">
           <h3>Dokumentumok</h3>
-          <DocumentDropzone hint="Több fájl is kiválasztható egyszerre, fájlonként maximum 50 MB." onFiles={upload} />
+          <DocumentDropzone hint="Több fájl is kiválasztható egyszerre, fájlonként maximum 500 MB." onFiles={upload} />
           <table className="table">
             <thead>
               <tr>

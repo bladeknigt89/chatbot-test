@@ -1,7 +1,7 @@
 import { forwardRef, useImperativeHandle, useRef, useState } from "react";
 
 const ACCEPT = ".pdf,.docx,.xlsx,.xls";
-const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
+const MAX_UPLOAD_BYTES = 500 * 1024 * 1024;
 
 type Props = {
   disabled?: boolean;
@@ -33,7 +33,7 @@ const DocumentDropzone = forwardRef<DocumentDropzoneHandle, Props>(function Docu
     if (!files?.length || disabled || busy) return;
     const oversized = Array.from(files).find((file) => file.size > MAX_UPLOAD_BYTES);
     if (oversized) {
-      setError("A fájl mérete meghaladja a 50 MB-os limitet.");
+      setError("A fájl mérete meghaladja a 500 MB-os limitet.");
       if (inputRef.current) inputRef.current.value = "";
       return;
     }
@@ -72,7 +72,7 @@ const DocumentDropzone = forwardRef<DocumentDropzoneHandle, Props>(function Docu
         disabled={disabled || busy}
         onChange={(event) => void handle(event.target.files)}
       />
-      <p className="dropzone-title">Húzza ide a PDF, DOCX vagy XLSX fájlt (max. 50 MB)</p>
+      <p className="dropzone-title">Húzza ide a PDF, DOCX vagy XLSX fájlt (max. 500 MB)</p>
       {hint && <p className="muted">{hint}</p>}
       <button type="button" className="btn" disabled={disabled || busy} onClick={openPicker}>
         {busy ? "Feltöltés…" : "Feltöltés"}
