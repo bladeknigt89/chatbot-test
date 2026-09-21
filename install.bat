@@ -1,14 +1,32 @@
 @echo off
-setlocal EnableExtensions
+setlocal EnableExtensions EnableDelayedExpansion
 cd /d "%~dp0"
 
 echo === Local AI Chatbot telepito (Windows) ===
+echo Elvart Python: 3.14
 
-where python >nul 2>&1
-if errorlevel 1 (
-  echo Python nem talalhato. Telepits Python 3.11+ verziot, es pipeld a PATH-ba.
+set "PYEXE="
+where py >nul 2>&1
+if not errorlevel 1 (
+  py -3.14 -c "import sys; raise SystemExit(0 if sys.version_info[:2]==(3,14) else 1)" >nul 2>&1
+  if not errorlevel 1 set "PYEXE=py -3.14"
+)
+if not defined PYEXE (
+  where python >nul 2>&1
+  if not errorlevel 1 (
+    for /f "delims=" %%V in ('python -c "import sys; print(f'{sys.version_info[0]}.{sys.version_info[1]}')" 2^>nul') do set "PYVER=%%V"
+    if "!PYVER!"=="3.14" set "PYEXE=python"
+  )
+)
+if not defined PYEXE (
+  echo Python 3.14 nem talalhato.
+  echo Telepitsd a Python 3.14-et: https://www.python.org/downloads/
+  echo Windows-on a "py -3.14" inditonak PATH-on kell lennie.
   exit /b 1
 )
+
+echo Hasznalt Python: %PYEXE%
+%PYEXE% -c "import sys; print(sys.version)"
 
 where node >nul 2>&1
 if errorlevel 1 (
@@ -18,7 +36,7 @@ if errorlevel 1 (
 
 echo.
 echo === Ollama telepites / inditas + modellek (models.json) ===
-python scripts\install_ollama.py --models-json models.json
+%PYEXE% scripts\install_ollama.py --models-json models.json
 if errorlevel 1 (
   echo.
   echo FIGYELEM: Az Ollama telepitese, inditasa vagy a modell letoltes nem sikerult teljesen.
@@ -33,8 +51,17 @@ if not exist ".env" (
   echo .env letrehozva az .env.example alapjan.
 )
 
+if exist "backend\.venv\Scripts\python.exe" (
+  backend\.venv\Scripts\python.exe -c "import sys; raise SystemExit(0 if sys.version_info[:2]==(3,14) else 1)" >nul 2>&1
+  if errorlevel 1 (
+    echo A meglévő venv nem Python 3.14. Ujraepitom: backend\.venv
+    rmdir /S /Q backend\.venv
+  )
+)
+
 if not exist "backend\.venv\Scripts\python.exe" (
-  python -m venv backend\.venv
+  echo Python 3.14 venv letrehozasa...
+  %PYEXE% -m venv backend\.venv
 )
 
 echo Python fuggosegek telepitese...
@@ -73,7 +100,7 @@ if errorlevel 1 (
 backend\.venv\Scripts\python.exe scripts\make_sample_docs.py
 
 echo.
-echo Telepites kesz.
+echo Telepites kesz (Python 3.14).
 echo Inditas: start.bat
 echo Admin: http://localhost:8000  felhasznalo: ai  jelszo: No_comment_123
 exit /b 0

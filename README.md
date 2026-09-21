@@ -26,7 +26,7 @@ A dokumentumfeltöltés 202-t ad vissza, a feldolgozás háttérjobban fut.
 
 | Réteg | Választás | Indok |
 | --- | --- | --- |
-| Backend | Python 3.11+, FastAPI, SQLAlchemy 2, Alembic | Stabil REST, Windows-barát, PostgreSQL-re migrálható |
+| Backend | Python 3.14, FastAPI, SQLAlchemy 2, Alembic | Stabil REST, Windows-barát, PostgreSQL-re migrálható |
 | Frontend | React + TypeScript + Vite | Modern, reszponzív admin UI |
 | LLM | Ollama + `qwen2.5:7b` | Ingyenes, lokális, CPU/GPU, jó magyar támogatás |
 | Embedding | Ollama + `nomic-embed-text` | Ugyanaz a runtime, egyszerű telepítés |
@@ -36,7 +36,7 @@ A dokumentumfeltöltés 202-t ad vissza, a feldolgozás háttérjobban fut.
 ## 4. Előfeltételek
 
 - Windows 10/11 vagy Linux
-- Python 3.11+
+- Python 3.14 (kötelező; az installer / start ellenőrzi)
 - Node.js 20+
 - Internet az első telepítéshez (függőségek + Ollama + modellek)
 - Ajánlott: 16 GB RAM (7B modellhez)
@@ -58,12 +58,14 @@ stop.bat
 
 Az `install.bat` sorrendben:
 
-1. ellenőrzi a Python / Node előfeltételeket;
+1. ellenőrzi a **Python 3.14** / Node előfeltételeket (`py -3.14` vagy `python`);
 2. **telepíti az Ollamát** (`winget` vagy `OllamaSetup.exe`), majd elindítja;
-3. létrehozza a `.env` fájlt és a Python venv-et;
+3. létrehozza a `.env` fájlt és a Python **3.14** venv-et (régi venv-et újraépíti, ha nem 3.14);
 4. telepíti a backend és frontend függőségeket, lebuildeli az admin UI-t;
 5. inicializálja az adatbázist és az `ai` admin felhasználót;
 6. a `models.json` alapján letölti a hiányzó LLM / embedding modelleket, és szinkronizálja a `.env`-et.
+
+Docker runtime: `docker/backend.Dockerfile` → `python:3.14-slim`.
 
 Külön Ollama telepítés / újraindítás:
 

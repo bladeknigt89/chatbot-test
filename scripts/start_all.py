@@ -21,6 +21,17 @@ def python_bin() -> Path:
     return BACKEND / ".venv" / "bin" / "python"
 
 
+def require_python_314(py: Path) -> int | None:
+    check = subprocess.run(
+        [str(py), "-c", "import sys; raise SystemExit(0 if sys.version_info[:2]==(3,14) else 1)"],
+        check=False,
+    )
+    if check.returncode != 0:
+        print("A virtuális környezet nem Python 3.14. Futtasd újra az install.bat / install.sh fájlt.")
+        return 1
+    return None
+
+
 def main() -> int:
     sys.path.insert(0, str(BACKEND))
     from app.bootstrap import ensure_llm_ready
@@ -30,6 +41,8 @@ def main() -> int:
     if not py.exists():
         print("A virtuális környezet hiányzik. Futtasd az install.bat / install.sh fájlt.")
         return 1
+    if (err := require_python_314(py)) is not None:
+        return err
 
     get_settings.cache_clear()
     settings = get_settings()
