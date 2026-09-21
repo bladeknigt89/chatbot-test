@@ -1,0 +1,5 @@
+# Shell scripts must use LF so Linux/macOS shebangs work after checkout on Windows.
+*.sh text eol=lf
+install.sh text eol=lf
+start.sh text eol=lf
+stop.sh text eol=lf

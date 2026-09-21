@@ -1,0 +1,13 @@
+---
+description: Magyar admin UI és nyelvi viselkedés
+globs: frontend/**/*.{tsx,ts,css}
+alwaysApply: false
+---
+
+# Magyar UI
+
+Az admin felület nyelve magyar. Címkék, hibák, gombok, üres állapotok magyarul.
+
+Chatbot: a felhasználó nyelvén válaszol (magyar kérdés → magyar válasz).
+
+Oldalak: `/login`, `/dashboard`, `/agents`, `/agents/:id`, `/documents`, `/api-keys`, `/logs`, `/settings`, `/profile`.

@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="hu">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Chat widget demó</title>
+    <style>
+      body { font-family: Segoe UI, sans-serif; margin: 48px; background: #f6f1e8; color: #1c1915; }
+      code { background: #efe8dc; padding: 2px 6px; border-radius: 6px; }
+    </style>
+  </head>
+  <body>
+    <h1>Beágyazható chat widget</h1>
+    <p>Cseréld ki az <code>AGENT_ID</code> és <code>API_KEY</code> értékeket.</p>
+    <script>
+      window.ChatWidgetConfig = {
+        primaryColor: "#c45c26",
+        title: "HR Segéd",
+        position: "right",
+        welcomeMessage: "Üdvözlöm! A feltöltött dokumentumokról kérdezhet."
+      };
+    </script>
+    <script src="/chat-widget.js" data-agent="AGENT_ID" data-api-key="API_KEY"></script>
+  </body>
+</html>

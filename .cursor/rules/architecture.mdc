@@ -1,0 +1,18 @@
+---
+description: Projektarchitektúra és moduláris struktúra
+alwaysApply: true
+---
+
+# Architektúra
+
+Lokális, dokumentumalapú multi-agent RAG platform.
+
+- Backend: FastAPI (`backend/app`), SQLite + SQLAlchemy 2.0, Alembic
+- Frontend: React + TypeScript + Vite (`frontend`)
+- Widget: önálló JS (`chat-widget/chat-widget.js`), nem függ az admin UI-tól
+- LLM: Ollama (konfigurálható, nem hardcode)
+- Embeddings: Ollama vagy sentence-transformers (ENV)
+- Vector store: külön SQLite DB metadata szűréssel (`agent_id` kötelező)
+- Worker: háttérfolyamat a dokumentumfeldolgozáshoz
+
+Új funkciót a meglévő modulba tedd (`api`, `documents`, `rag`, `llm`). Ne duplikálj szolgáltatásokat. Adatmodell-változásnál frissítsd: migration, model, schema, API, frontend, tesztek.

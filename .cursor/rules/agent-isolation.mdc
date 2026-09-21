@@ -1,0 +1,18 @@
+---
+description: Agent tudásbázis-izoláció
+alwaysApply: true
+---
+
+# Agent isolation
+
+Minden agent tudásbázisa zárt. Vector search, dokumentum lista, chat és törlés mindig `agent_id` szerint szűrt.
+
+```python
+# ❌ BAD
+store.search(query_embedding, top_k=5)
+
+# ✅ GOOD
+store.search(query_embedding, top_k=5, agent_id=agent.id)
+```
+
+Agent törléskor: chunkok, fájlok, chat history, jobok, DB rekord — ne maradjon orphan.

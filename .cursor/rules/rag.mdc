@@ -1,0 +1,16 @@
+---
+description: RAG és hallucination szabályok
+globs: backend/app/rag/**/*.py
+alwaysApply: false
+---
+
+# RAG
+
+Pipeline: parse → clean → chunk (CHUNK_SIZE/OVERLAP ENV) → embed → vector DB.
+
+Chat: embed kérdés → filter `agent_id` → TOP_K → context → local LLM.
+
+Prompt: csak a dokumentumok alapján; ne találjon ki; ha nincs infó, pontosan:
+`A rendelkezésre álló dokumentumok alapján erre nem található megfelelő információ.`
+
+Forrás csak retrieval metadata-ból. Chunk metadata: agent_id, document_id, document_name, chunk_index, page_number/sheet_name.

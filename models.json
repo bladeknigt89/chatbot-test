@@ -1,0 +1,24 @@
+{
+  "base_url": "http://127.0.0.1:11434",
+  "llm": {
+    "provider": "ollama",
+    "model": "qwen2.5:7b",
+    "temperature": 0.1
+  },
+  "embedding": {
+    "provider": "ollama",
+    "model": "nomic-embed-text"
+  },
+  "models": [
+    {
+      "name": "qwen2.5:7b",
+      "role": "llm",
+      "description": "Helyi chat / RAG válaszadó modell"
+    },
+    {
+      "name": "nomic-embed-text",
+      "role": "embedding",
+      "description": "Dokumentum-embedding modell"
+    }
+  ]
+}

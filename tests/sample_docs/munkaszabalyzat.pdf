@@ -1,0 +1,61 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>
+endobj
+4 0 obj
+<< /Length 647 >>
+stream
+BT
+/F1 12 Tf
+72 720 Td (A vállalat neve: Example Kft.) Tj
+0 -18 Td
+72 702 Td () Tj
+0 -18 Td
+72 684 Td (A munkarend:) Tj
+0 -18 Td
+72 666 Td (Hétf??péntek 8:00?16:00.) Tj
+0 -18 Td
+72 648 Td () Tj
+0 -18 Td
+72 630 Td (Az éves szabadság:) Tj
+0 -18 Td
+72 612 Td (25 munkanap.) Tj
+0 -18 Td
+72 594 Td () Tj
+0 -18 Td
+72 576 Td (3. fejezet) Tj
+0 -18 Td
+72 558 Td (A próbaid? 3 hónap.) Tj
+0 -18 Td
+72 540 Td () Tj
+0 -18 Td
+72 522 Td (A szerz?dés id?tartama: határozatlan idej?.) Tj
+0 -18 Td
+72 504 Td (Az ügyfél kötelezettségei: a szabályzat betartása.) Tj
+0 -18 Td
+72 486 Td (A szolgáltatás igénybevételének feltétele: érvényes munkaviszony.) Tj
+0 -18 Td
+ET
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000241 00000 n 
+0000000939 00000 n 
+trailer << /Size 6 /Root 1 0 R >>
+startxref
+1009
+%%EOF
