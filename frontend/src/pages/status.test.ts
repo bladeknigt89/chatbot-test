@@ -1,4 +1,7 @@
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
+import DocumentDropzone from "../components/DocumentDropzone";
 import { documentProgress, documentStatusLabel } from "../components/DocumentStatus";
 import type { DocumentItem } from "../services/api";
 
@@ -26,5 +29,14 @@ describe("document status helpers", () => {
     expect(documentStatusLabel(doc({ processing_stage: "parsing" }))).toBe("szöveg kinyerése");
     expect(documentProgress(doc({ progress_percent: 72 }))).toBe(72);
     expect(documentProgress(doc({ status: "READY", progress_percent: 0 }))).toBe(100);
+  });
+});
+
+describe("document dropzone", () => {
+  it("renders a visible upload button", () => {
+    const html = renderToStaticMarkup(createElement(DocumentDropzone, { onFiles: () => undefined }));
+    expect(html).toContain("Feltöltés");
+    expect(html).toContain("50 MB");
+    expect(html).toContain('type="file"');
   });
 });

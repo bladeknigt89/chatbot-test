@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import AgentActions from "../components/AgentActions";
+import DocumentDropzone from "../components/DocumentDropzone";
 import { DocumentStatus, isProcessingDoc } from "../components/DocumentStatus";
 import { Agent, DocumentItem, api } from "../services/api";
 
@@ -41,8 +42,7 @@ export default function AgentDetail() {
     await load();
   }
 
-  async function upload(files: FileList | null) {
-    if (!files) return;
+  async function upload(files: FileList) {
     for (const file of Array.from(files)) {
       await api.upload(id, file);
     }
@@ -141,24 +141,7 @@ export default function AgentDetail() {
         </form>
         <div className="card">
           <h3>Dokumentumok</h3>
-          <div
-            className="dropzone"
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={(e) => {
-              e.preventDefault();
-              void upload(e.dataTransfer.files);
-            }}
-          >
-            Húzza ide a PDF, DOCX vagy XLSX fájlt
-            <div>
-              <input
-                type="file"
-                multiple
-                accept=".pdf,.docx,.xlsx,.xls"
-                onChange={(e) => void upload(e.target.files)}
-              />
-            </div>
-          </div>
+          <DocumentDropzone hint="Több fájl is kiválasztható egyszerre, fájlonként maximum 50 MB." onFiles={upload} />
           <table className="table">
             <thead>
               <tr>

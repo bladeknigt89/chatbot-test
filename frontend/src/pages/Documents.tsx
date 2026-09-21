@@ -1,12 +1,13 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import DocumentDropzone, { DocumentDropzoneHandle } from "../components/DocumentDropzone";
 import { DocumentStatus, isProcessingDoc } from "../components/DocumentStatus";
 import { Agent, DocumentItem, api } from "../services/api";
 
 export default function Documents() {
+  const dropzoneRef = useRef<DocumentDropzoneHandle>(null);
   const [docs, setDocs] = useState<DocumentItem[]>([]);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [agentId, setAgentId] = useState("");
-  const [drag, setDrag] = useState(false);
 
   async function load() {
     const [nextDocs, nextAgents] = await Promise.all([api.documents(), api.agents()]);
@@ -25,8 +26,10 @@ export default function Documents() {
     return () => clearInterval(timer);
   }, [docs]);
 
-  async function upload(files: FileList | null) {
-    if (!files || !agentId) return;
+  async function upload(files: FileList) {
+    if (!agentId) {
+      throw new Error("Először válasszon ki egy agentet.");
+    }
     for (const file of Array.from(files)) {
       await api.upload(agentId, file);
     }
@@ -40,11 +43,15 @@ export default function Documents() {
           <h2>Dokumentumok</h2>
           <p>Feltöltés után a worker automatikusan feldolgozza a fájlokat.</p>
         </div>
+        <button type="button" className="btn" disabled={!agentId} onClick={() => dropzoneRef.current?.open()}>
+          Feltöltés
+        </button>
       </div>
       <div className="card form" style={{ marginBottom: 16 }}>
         <label>
           Cél agent
           <select value={agentId} onChange={(e) => setAgentId(e.target.value)}>
+            {agents.length === 0 && <option value="">Nincs agent</option>}
             {agents.map((agent) => (
               <option key={agent.id} value={agent.id}>
                 {agent.name}
@@ -52,24 +59,12 @@ export default function Documents() {
             ))}
           </select>
         </label>
-        <div
-          className={`dropzone ${drag ? "active" : ""}`}
-          onDragOver={(e) => {
-            e.preventDefault();
-            setDrag(true);
-          }}
-          onDragLeave={() => setDrag(false)}
-          onDrop={(e) => {
-            e.preventDefault();
-            setDrag(false);
-            void upload(e.dataTransfer.files);
-          }}
-        >
-          Húzza ide a dokumentumot, vagy tallózzon.
-          <div>
-            <input type="file" multiple accept=".pdf,.docx,.xlsx,.xls" onChange={(e) => void upload(e.target.files)} />
-          </div>
-        </div>
+        <DocumentDropzone
+          ref={dropzoneRef}
+          disabled={!agentId}
+          hint={agentId ? "Több fájl is kiválasztható egyszerre, fájlonként maximum 50 MB." : "Először hozzon létre egy agentet."}
+          onFiles={upload}
+        />
       </div>
       <div className="card">
         <table className="table">

@@ -144,8 +144,25 @@ input, textarea, select {
   text-align: center;
   background: #faf7f1;
   color: var(--muted);
+  display: grid;
+  gap: 12px;
+  justify-items: center;
+  margin-bottom: 16px;
 }
 .dropzone.active { border-color: var(--accent); background: #fff6ef; }
+.dropzone.disabled { opacity: .65; }
+.dropzone-title { margin: 0; color: var(--ink); font-weight: 600; }
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
 
 .chat-log { display: flex; flex-direction: column; gap: 10px; max-height: 420px; overflow: auto; }
 .bubble { padding: 10px 12px; border-radius: 14px; max-width: 85%; }

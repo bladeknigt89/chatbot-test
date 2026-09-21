@@ -37,7 +37,7 @@ class Settings(BaseSettings):
     storage_path: str = "./storage/uploads"
     log_path: str = "./storage/logs"
 
-    max_file_size: int = 26_214_400
+    max_file_size: int = 52_428_800
     chunk_size: int = 500
     chunk_overlap: int = 120
     top_k: int = 8
