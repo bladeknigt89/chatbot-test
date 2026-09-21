@@ -41,6 +41,8 @@ A dokumentumfeltöltés 202-t ad vissza, a feldolgozás háttérjobban fut.
 - Internet az első telepítéshez (függőségek + Ollama + modellek)
 - Ajánlott: 16 GB RAM (7B modellhez)
 
+A backend függőségek (pydantic-core, orjson, pillow, numpy stb.) Python 3.14-es előreépített wheel-eket használnak; régi pinelt verziók forrásból fordításkor PyO3 hibával elbukhatnak.
+
 Az Ollama runtime-ot az installer automatikusan telepíti, ha még nincs a gépen.
 
 ## 5. Windows telepítés
