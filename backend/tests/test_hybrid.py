@@ -1,14 +1,19 @@
 from app.rag.hu_morph import stem_hu, stems_hu, tokenize, tokens_match
-from app.rag.hybrid import hybrid_rerank, keyword_score
+from app.rag.hybrid import (
+    document_name_boost,
+    hybrid_rerank,
+    is_detailed_question,
+    keyword_score,
+)
 from app.vectorstore.store import VectorMatch
 
 
-def _match(text: str, score: float, idx: int = 0) -> VectorMatch:
+def _match(text: str, score: float, idx: int = 0, name: str = "doc.pdf") -> VectorMatch:
     return VectorMatch(
         chunk_id=f"c{idx}",
         agent_id="a1",
         document_id="d1",
-        document_name="doc.pdf",
+        document_name=name,
         chunk_index=idx,
         text=text,
         page_number=1,
@@ -117,3 +122,34 @@ def test_hybrid_rerank_promotes_faculty_overview():
 def test_tokenize_skips_stopwords():
     assert "milyen" not in tokenize("Milyen karok vannak?")
     assert "karok" in tokenize("Milyen karok vannak?")
+
+
+def test_is_detailed_question_detects_rules_requests():
+    assert is_detailed_question("write me the detailed rules of legend of the five rings")
+    assert is_detailed_question("Ismertesd a részletes szabályokat")
+    assert not is_detailed_question("Mi a vállalat neve?")
+
+
+def test_document_name_boost_prefers_core_rules():
+    question = "write me the detailed rules of legend of the five rings"
+    core = document_name_boost(question, "Legend Of The Five Rings 4e - Core Rules.pdf")
+    history = document_name_boost(question, "Legend Of The Five Rings 4e - Imperial Histories.pdf")
+    assert core > history
+
+
+def test_hybrid_rerank_raises_top_k_for_detailed_rules():
+    question = "write me the detailed rules of legend of the five rings"
+    matches = [
+        _match("History of the Emerald Empire.", 0.9, 0, "Imperial Histories.pdf"),
+        _match("Clan politics overview.", 0.88, 1, "The Great Clans.pdf"),
+        _match("Roll Ring + Skill Keep Trait. Raises increase the TN by 5.", 0.55, 2, "Core Rules.pdf"),
+        _match("Dice pools and TN basics for skill rolls.", 0.54, 3, "Core Rules.pdf"),
+        _match("Conflict rounds and initiative order.", 0.53, 4, "Core Rules.pdf"),
+    ]
+    # Pad with filler so top_k expansion has room
+    for i in range(5, 40):
+        matches.append(_match(f"Flavor text {i} about clans.", 0.4, i, "Emerald Empire.pdf"))
+    ranked = hybrid_rerank(question, matches, top_k=8)
+    assert len(ranked) >= 24
+    assert any("Core Rules" in m.document_name for m in ranked[:5])
+    assert any("Ring + Skill" in m.text or "Dice pools" in m.text for m in ranked[:5])

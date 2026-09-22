@@ -28,6 +28,8 @@ def get_settings_api(db: Session = Depends(get_db), auth: AuthContext = Depends(
         embedding_provider=settings.embedding_provider,
         embedding_model=settings.embedding_model,
         ocr_enabled=settings.ocr_enabled,
+        ocr_dpi=settings.ocr_dpi,
+        ocr_languages=settings.ocr_languages,
     )
 
 

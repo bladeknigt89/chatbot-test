@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     llm_base_url: str = "http://127.0.0.1:11434"
     llm_model: str = "qwen2.5:7b"
     llm_temperature: float = 0.1
+    llm_num_predict: int = 4096
     llm_skip_check: bool = False
 
     embedding_provider: str = "ollama"
@@ -40,10 +41,13 @@ class Settings(BaseSettings):
     max_file_size: int = 524_288_000
     chunk_size: int = 500
     chunk_overlap: int = 120
-    top_k: int = 8
+    top_k: int = 20
 
     chat_history_enabled: bool = True
-    ocr_enabled: bool = False
+    ocr_enabled: bool = True
+    ocr_dpi: int = 160
+    ocr_languages: str = "hun+eng"
+    tesseract_cmd: str = ""
 
     login_rate_limit: str = "5/minute"
     chat_rate_limit: str = "30/minute"

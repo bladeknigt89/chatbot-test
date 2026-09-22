@@ -15,13 +15,16 @@ openpyxl==3.1.5
 xlrd==2.0.1
 numpy==2.5.3
 pillow==12.3.0
+pypdfium2==5.13.0
+pytesseract==0.3.13
+rapidocr==3.9.2
+onnxruntime==1.30.0
 python-dotenv==1.0.1
 orjson==3.12.0
 aiosqlite==0.20.0
 
-# Optional OCR (used only if OCR_ENABLED=true and Tesseract is installed)
-# pytesseract==0.3.13
-# pdf2image==1.17.0
+# OCR: RapidOCR beépített (Tesseract nélkül is működik).
+# A Tesseract opcionális, jobb magyar ékezetekhez.
 
 # Optional alternative embedding provider
 # sentence-transformers==3.3.1

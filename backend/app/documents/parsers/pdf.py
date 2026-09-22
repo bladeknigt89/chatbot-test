@@ -1,33 +1,69 @@
+from __future__ import annotations
+
+from collections.abc import Callable
 from pathlib import Path
+import logging
 import re
 
 from pypdf import PdfReader
 
-from app.config import get_settings
+from app.documents.ocr import PdfOcrSession, page_needs_ocr
 from app.documents.parsers.base import ExtractedBlock, ExtractedDocument
 
+logger = logging.getLogger("local_ai_chatbot.pdf")
+
 _SECTION_START = re.compile(r"(?m)^(?=\d{1,2}\.\s+\S)")
+ProgressCallback = Callable[[int, int], None]
 
 
-def parse_pdf(path: Path) -> ExtractedDocument:
+def parse_pdf(path: Path, on_progress: ProgressCallback | None = None) -> ExtractedDocument:
     reader = PdfReader(str(path))
-    blocks: list[ExtractedBlock] = []
-    parts: list[str] = []
+    total = len(reader.pages)
+    page_texts: list[tuple[int, str, bool]] = []
     for index, page in enumerate(reader.pages, start=1):
         raw = page.extract_text() or ""
         text = _clean(raw)
-        if not text:
-            text = _ocr_page(path, index)
+        page_texts.append((index, text, page_needs_ocr(text)))
+        if on_progress and (index == 1 or index == total or index % 10 == 0):
+            on_progress(index, total)
+
+    needs_ocr = [index for index, text, flag in page_texts if flag]
+    if needs_ocr:
+        logger.info("OCR needed for %s/%s pages in %s", len(needs_ocr), total, path.name)
+        with PdfOcrSession(path) as session:
+            for i, (index, text, flag) in enumerate(page_texts):
+                if not flag:
+                    continue
+                ocr_text = session.ocr_page(index)
+                if ocr_text and len(ocr_text) > len(text):
+                    page_texts[i] = (index, ocr_text, flag)
+                if on_progress:
+                    on_progress(index, total)
+
+    blocks: list[ExtractedBlock] = []
+    parts: list[str] = []
+    for index, text, _flag in page_texts:
         if not text:
             continue
         page_blocks = _page_sections(text, index)
         blocks.extend(page_blocks)
         parts.append(f"[Oldal {index}]\n{text}")
+
+    try:
+        close = getattr(reader, "close", None)
+        if callable(close):
+            close()
+    except Exception:
+        pass
+    del reader
+    del page_texts
+
     joined = "\n\n".join(parts).strip()
     if not joined:
         raise ValueError(
             "A PDF-ből nem sikerült szöveget kinyerni. "
-            "Ha a dokumentum szkennelt, telepítse a Tesseract OCR-t és állítsa OCR_ENABLED=true értékre."
+            "A szkennelt (kép) oldalakat OCR-rel olvassuk; ellenőrizze, hogy az OCR_ENABLED=true, "
+            "és a RapidOCR vagy a Tesseract telepítve van."
         )
     return ExtractedDocument(text=joined, blocks=blocks)
 
@@ -47,24 +83,6 @@ def _page_sections(text: str, page_number: int) -> list[ExtractedBlock]:
             heading = match.group(1).strip()
         blocks.append(ExtractedBlock(text=piece, page_number=page_number, heading=heading))
     return blocks
-
-
-def _ocr_page(path: Path, page_number: int) -> str:
-    settings = get_settings()
-    if not settings.ocr_enabled:
-        return ""
-    try:
-        import pytesseract
-        from pdf2image import convert_from_path
-    except ImportError:
-        return ""
-    try:
-        images = convert_from_path(str(path), first_page=page_number, last_page=page_number)
-        if not images:
-            return ""
-        return _clean(pytesseract.image_to_string(images[0], lang="hun+eng"))
-    except Exception:
-        return ""
 
 
 def _clean(value: str) -> str:

@@ -195,7 +195,7 @@ Admin → Agentek → név, leírás, system prompt. Az agentek tudásbázisa eg
 
 Támogatott: PDF, DOCX, XLSX, XLS. Feltöltés után státuszok: `UPLOADED` → `PROCESSING` (parsing / chunking / embedding) → `READY` vagy `ERROR`.
 
-Szkennelt PDF-hez opcionális OCR: telepíts Tesseractet, `pip install pytesseract pdf2image`, `OCR_ENABLED=true`.
+A szkennelt, képoldalas PDF-ek szövegét OCR olvassa ki (alapból bekapcsolva, `OCR_ENABLED=true`). Elsőként a Tesseractet használja, ha telepítve van (`hun+eng`); különben a beépített RapidOCR motort. Opcionális Tesseract Windows-on: [UB-Mannheim Tesseract](https://github.com/UB-Mannheim/tesseract/wiki), magyar nyelvi csomaggal.
 
 ## 15. Chatbot használata
 
@@ -305,6 +305,7 @@ CHUNK_OVERLAP=150
 TOP_K=5
 MAX_FILE_SIZE=524288000
 CHAT_HISTORY_ENABLED=true
+OCR_ENABLED=true
 ```
 
 Titkokat ne commitolj. A `SECRET_KEY`-t élesben cseréld le.
@@ -317,7 +318,7 @@ Titkokat ne commitolj. A `SECRET_KEY`-t élesben cseréld le.
 | Ollama winget msstore hiba | A telepítő `--source winget` forrást használ. Ha ez sem megy, automatikusan `OllamaSetup.exe`-t tölt le. |
 | OllamaSetup.exe letöltés elakad | Ellenőrizd a hálózatot / tűzfalat, vagy töltsd le kézzel: https://ollama.com/download |
 | Hiányzó modell | `ollama pull qwen2.5:7b` és `ollama pull nomic-embed-text` |
-| Dokumentum ERROR, kép-PDF | Tesseract + `OCR_ENABLED=true` |
+| Dokumentum ERROR, kép-PDF | `OCR_ENABLED=true` (alapértelmezett). Tesseract opcionális, RapidOCR a venv része. |
 | Frontend 404 a gyökéren | `cd frontend && npm run build`, majd indítsd újra a backendet |
 | Port foglalt | `APP_PORT` módosítása a `.env`-ben |
 | Worker nem dolgoz | `start.bat` indítja; log: `storage/logs/worker.log` |
@@ -333,7 +334,7 @@ Titkokat ne commitolj. A `SECRET_KEY`-t élesben cseréld le.
 
 - Az alap embedding (`nomic-embed-text`) angol-központú, magyarul használható, de az `e5-small` pontosabb retrieval-t adhat.
 - Az SQLite vector search memóriában számol cosine-t agentenként; százezres chunk-skálán PostgreSQL + pgvector a következő lépés.
-- Az OCR nem kötelező komponens, Tesseract nélkül a kép-PDF-ek hibára futnak.
+- A szkennelt PDF OCR-je RapidOCR-rel Tesseract nélkül is működik; a magyar ékezetekhez a Tesseract `hun` csomagja pontosabb.
 - A Docker-összeállítás az LLM-et a host Ollamára bízza, hogy a GPU-t ne kelljen konténerben külön kezelni.
 
 ## Gyors RAG próba

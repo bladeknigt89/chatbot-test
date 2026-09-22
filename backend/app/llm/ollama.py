@@ -2,6 +2,7 @@ from collections.abc import Iterator
 
 import httpx
 
+from app.config import get_settings
 from app.llm.base import LLMProvider
 
 
@@ -11,12 +12,19 @@ class OllamaLLMProvider(LLMProvider):
         self.model = model
         self.timeout = timeout
 
+    def _options(self, temperature: float) -> dict:
+        settings = get_settings()
+        options: dict = {"temperature": temperature}
+        if settings.llm_num_predict and settings.llm_num_predict > 0:
+            options["num_predict"] = settings.llm_num_predict
+        return options
+
     def generate(self, messages: list[dict[str, str]], temperature: float) -> str:
         payload = {
             "model": self.model,
             "messages": messages,
             "stream": False,
-            "options": {"temperature": temperature},
+            "options": self._options(temperature),
         }
         with httpx.Client(timeout=self.timeout) as client:
             response = client.post(f"{self.base_url}/api/chat", json=payload)
@@ -33,7 +41,7 @@ class OllamaLLMProvider(LLMProvider):
             "model": self.model,
             "messages": messages,
             "stream": True,
-            "options": {"temperature": temperature},
+            "options": self._options(temperature),
         }
         with httpx.Client(timeout=self.timeout) as client:
             with client.stream("POST", f"{self.base_url}/api/chat", json=payload) as response:

@@ -148,6 +148,8 @@ class SettingsOut(BaseModel):
     embedding_provider: str
     embedding_model: str
     ocr_enabled: bool
+    ocr_dpi: int
+    ocr_languages: str
 
 
 class SettingsUpdate(BaseModel):

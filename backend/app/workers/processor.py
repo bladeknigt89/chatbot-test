@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gc
 import logging
 
 from sqlalchemy.orm import Session
@@ -17,9 +18,17 @@ from app.vectorstore.store import get_vector_store
 logger = logging.getLogger("local_ai_chatbot.worker")
 
 USER_PARSE_ERROR = "A dokumentum feldolgozása sikertelen. Ellenőrizze, hogy a fájl nem sérült-e."
+USER_OCR_ERROR = (
+    "A szkennelt PDF szövegének felismerése sikertelen. "
+    "Ellenőrizze, hogy az OCR_ENABLED=true, és a RapidOCR vagy a Tesseract telepítve van."
+)
 USER_EMBED_ERROR = (
     "Az embedding készítése sikertelen. Ellenőrizze, hogy az Ollama fut-e, "
     "és a modell le van-e töltve (pl. ollama pull nomic-embed-text)."
+)
+USER_MEMORY_ERROR = (
+    "A dokumentum feldolgozása memóriahiány miatt megszakadt. "
+    "Próbálja újra, vagy kisebb fájlokkal / alacsonyabb OCR_DPI értékkel."
 )
 
 
@@ -45,6 +54,8 @@ def process_job(db: Session, job: Job) -> None:
         job.finished_at = utcnow()
         db.commit()
         raise
+    finally:
+        gc.collect()
 
 
 def _set_progress(db: Session, document: Document, *, stage: str, percent: int) -> None:
@@ -71,12 +82,27 @@ def _process_document(db: Session, document_id: str, reprocess: bool = False) ->
         resource_id=document.id,
         details=document.original_filename,
     )
+    extracted = None
+    chunks = None
     try:
         path = resolve_document_path(document.agent_id, document.stored_filename)
-        _set_progress(db, document, stage="parsing", percent=12)
-        extracted = parse_document(path, document.mime_type)
+        _set_progress(db, document, stage="parsing", percent=8)
+
+        def on_parse_progress(done: int, total: int) -> None:
+            if total <= 0:
+                return
+            # Parse sáv: 8% → 24%
+            percent = 8 + int(16 * min(done, total) / total)
+            document.processing_stage = "parsing"
+            document.progress_percent = percent
+            document.updated_at = utcnow()
+            db.commit()
+
+        extracted = parse_document(path, document.mime_type, on_progress=on_parse_progress)
         _set_progress(db, document, stage="chunking", percent=25)
         chunks = chunk_document(extracted, settings.chunk_size, settings.chunk_overlap)
+        # A teljes szöveg már nem kell a memóriában
+        extracted = None
         if not chunks:
             raise ValueError("A dokumentumból nem jött létre feldolgozható szöveg.")
         _set_progress(db, document, stage="chunking", percent=35)
@@ -98,8 +124,9 @@ def _process_document(db: Session, document_id: str, reprocess: bool = False) ->
             document_name=document.original_filename,
             chunks=chunks,
             on_progress=on_embed_progress,
-            batch_size=8,
+            batch_size=4,
         )
+        chunks = None
         document.status = "READY"
         document.chunk_count = count
         document.error_message = None
@@ -112,6 +139,21 @@ def _process_document(db: Session, document_id: str, reprocess: bool = False) ->
             resource_id=document.id,
             details=f"chunks={count}",
         )
+    except MemoryError as exc:
+        logger.exception("Document processing OOM: %s", document_id)
+        document.status = "ERROR"
+        document.processing_stage = "error"
+        document.error_message = USER_MEMORY_ERROR
+        db.commit()
+        write_audit(
+            db,
+            user="worker",
+            action="DOCUMENT_PROCESSING_FAILED",
+            resource_type="document",
+            resource_id=document.id,
+            details=document.error_message,
+        )
+        raise exc
     except Exception as exc:
         logger.exception("Document processing failed: %s", document_id)
         document.status = "ERROR"
@@ -127,10 +169,21 @@ def _process_document(db: Session, document_id: str, reprocess: bool = False) ->
             details=document.error_message,
         )
         raise
+    finally:
+        extracted = None
+        chunks = None
+        gc.collect()
 
 
 def _friendly_error(exc: Exception) -> str:
+    message = str(exc).strip()
     text = f"{type(exc).__name__} {exc}".lower()
+    if isinstance(exc, MemoryError) or "memory" in text:
+        return USER_MEMORY_ERROR
+    if any(token in text for token in ["ocr", "szkennelt", "tesseract", "rapidocr"]):
+        return message or USER_OCR_ERROR
+    if message.startswith("A PDF-ből nem sikerült"):
+        return message
     if any(
         token in text
         for token in [

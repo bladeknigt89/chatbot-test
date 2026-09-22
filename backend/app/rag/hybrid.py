@@ -19,6 +19,16 @@ _LIST_QUESTION = re.compile(
     re.IGNORECASE,
 )
 
+_DETAILED_QUESTION = re.compile(
+    r"("
+    r"\bdetailed\b|\bfull\b|\bcomplete\b|\bcomprehensive\b|\bexplain\b|\bwrite\s+me\b|"
+    r"\brules?\b|\bmechanics?\b|\bhow\s+to\s+play\b|\bstep[- ]by[- ]step\b|"
+    r"\breszletes|\brészletes|\bteljes\b|\bmagyaraz|\bmagyaráz|\bszabaly|\bszabály|"
+    r"\bismertes|\bfoglald\s+ossze|\bfoglald\s+össze|\bmutasd\s+be\b"
+    r")",
+    re.IGNORECASE,
+)
+
 # Téma-bónusz: kérdés-tő → dokumentum-jelzők (általános, nem csak egy-egy szó).
 _TOPIC_MARKERS: tuple[tuple[str, tuple[str, ...], float], ...] = (
     ("tortenet", ("tortenet", "jogelod", "alapit"), 0.4),
@@ -37,6 +47,30 @@ def is_list_question(question: str) -> bool:
     return bool(_LIST_QUESTION.search(fold_accents(question)))
 
 
+def is_detailed_question(question: str) -> bool:
+    """Részletes / szabály / teljes magyarázat kérések — több kontextust igényelnek."""
+    return bool(_DETAILED_QUESTION.search(fold_accents(question)))
+
+
+def document_name_boost(question: str, document_name: str) -> float:
+    """Dokumentumnév-együttállás (pl. rules → Core Rules)."""
+    q = fold_accents(question.lower())
+    name = fold_accents(document_name.lower().replace("_", " ").replace("-", " "))
+    boost = 0.0
+    wants_rules = any(
+        tok in q for tok in ("rule", "rules", "szabal", "szabaly", "mechanics", "how to play")
+    )
+    if wants_rules:
+        if "core rule" in name or ("core" in name and "rule" in name):
+            boost += 0.45
+        elif "rule" in name and "enemy" not in name and "histor" not in name:
+            boost += 0.2
+    if "legend of the five rings" in q or re.search(r"\bl5r\b", q):
+        if "legend of the five rings" in name or "l5r" in name:
+            boost += 0.12
+    return boost
+
+
 def _token_hit(q_tok: str, text_tokens: set[str]) -> bool:
     for text_tok in text_tokens:
         if tokens_match(q_tok, text_tok):
@@ -53,7 +87,6 @@ def keyword_score(question: str, text: str) -> float:
     hits = sum(1 for tok in q_tokens if _token_hit(tok, text_tokens))
     score = hits / len(q_tokens)
 
-    q_fold = fold_accents(question)
     q_stems = expand_query_tokens(q_tokens)
 
     # Általános téma-bónusz a kérdés tövei alapján
@@ -92,6 +125,29 @@ def keyword_score(question: str, text: str) -> float:
         elif numbered >= 2:
             score += 0.2
 
+    if is_detailed_question(question):
+        # Játékszabály / mechanika jelek
+        if any(
+            marker in text_fold
+            for marker in (
+                "roll",
+                "dice",
+                "skill",
+                "ring",
+                "tn ",
+                "raises",
+                "conflict",
+                "initiative",
+                "damage",
+                "trait",
+                "dobas",
+                "kocka",
+                "kepesseg",
+                "celertek",
+            )
+        ):
+            score += 0.2
+
     return min(score, 1.0)
 
 
@@ -107,7 +163,8 @@ def hybrid_rerank(
     ranked: list[VectorMatch] = []
     for match in matches:
         kw = keyword_score(question, match.text)
-        combined = ((1.0 - keyword_weight) * float(match.score)) + (keyword_weight * kw)
+        doc_boost = document_name_boost(question, match.document_name)
+        combined = ((1.0 - keyword_weight) * float(match.score)) + (keyword_weight * kw) + doc_boost
         ranked.append(
             VectorMatch(
                 chunk_id=match.chunk_id,
@@ -123,9 +180,11 @@ def hybrid_rerank(
         )
     ranked.sort(key=lambda item: item.score, reverse=True)
 
-    effective_k = top_k
+    effective_k = max(top_k, min(len(ranked), 20))
     if is_list_question(question):
-        effective_k = max(top_k, min(len(ranked), top_k + 4))
+        effective_k = max(effective_k, min(len(ranked), top_k + 4, 24))
+    if is_detailed_question(question):
+        effective_k = max(effective_k, min(len(ranked), max(top_k * 3, 28)))
     return ranked[:effective_k]
 
 

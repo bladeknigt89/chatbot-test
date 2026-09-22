@@ -41,6 +41,9 @@ export default function Settings() {
         <div className="muted">Embedding: {String(data.embedding_provider)} / {String(data.embedding_model)}</div>
         <div className="muted">CHUNK_SIZE={String(data.chunk_size)} · OVERLAP={String(data.chunk_overlap)} · TOP_K={String(data.top_k)}</div>
         <div className="muted">MAX_FILE_SIZE={String(data.max_file_size)} bájt</div>
+        <div className="muted">
+          OCR: {data.ocr_enabled ? "bekapcsolva" : "kikapcsolva"} · {String(data.ocr_languages)} · {String(data.ocr_dpi)} DPI
+        </div>
         <button className="btn" type="submit">Mentés</button>
         {saved && <div className="success">{saved}</div>}
       </form>

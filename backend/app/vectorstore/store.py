@@ -115,20 +115,45 @@ class SqliteVectorStore:
                 (agent_id,),
             ).fetchall()
         for row in rows:
-            matches.append(
-                VectorMatch(
-                    chunk_id=row["id"],
-                    agent_id=row["agent_id"],
-                    document_id=row["document_id"],
-                    document_name=row["document_name"],
-                    chunk_index=int(row["chunk_index"]),
-                    text=row["text"],
-                    page_number=row["page_number"],
-                    sheet_name=row["sheet_name"],
-                    score=0.0,
-                )
-            )
+            matches.append(self._row_to_match(row, score=0.0))
         return matches
+
+    def get_chunks_by_indices(
+        self,
+        *,
+        agent_id: str,
+        document_id: str,
+        indices: list[int],
+    ) -> list[VectorMatch]:
+        """Adott dokumentum megadott chunk_index értékei — szomszéd-kiterjesztéshez."""
+        unique = sorted({int(i) for i in indices if i >= 0})
+        if not unique:
+            return []
+        placeholders = ",".join("?" for _ in unique)
+        with self._connect() as conn:
+            rows = conn.execute(
+                f"""
+                SELECT * FROM chunks
+                WHERE agent_id = ? AND document_id = ?
+                  AND chunk_index IN ({placeholders})
+                ORDER BY chunk_index
+                """,
+                (agent_id, document_id, *unique),
+            ).fetchall()
+        return [self._row_to_match(row, score=0.0) for row in rows]
+
+    def _row_to_match(self, row: sqlite3.Row, *, score: float) -> VectorMatch:
+        return VectorMatch(
+            chunk_id=row["id"],
+            agent_id=row["agent_id"],
+            document_id=row["document_id"],
+            document_name=row["document_name"],
+            chunk_index=int(row["chunk_index"]),
+            text=row["text"],
+            page_number=row["page_number"],
+            sheet_name=row["sheet_name"],
+            score=score,
+        )
 
     def search(
         self,

@@ -6,6 +6,7 @@ from app.config import get_settings
 from app.documents.chunking import Chunk
 from app.embeddings.base import EmbeddingProvider
 from app.llm.base import LLMProvider
+from app.rag.hybrid import is_detailed_question, is_list_question
 from app.rag.prompts import build_messages, no_info_reply
 from app.schemas import ChatSource
 from app.vectorstore.store import SqliteVectorStore, VectorMatch
@@ -80,12 +81,16 @@ class RAGPipeline:
         return indexed
 
     def retrieve(self, *, agent_id: str, question: str, top_k: int | None = None) -> list[VectorMatch]:
-        from app.rag.hybrid import hybrid_rerank, is_list_question, keyword_score, merge_candidates
+        from app.rag.hybrid import hybrid_rerank, keyword_score, merge_candidates
 
         settings = get_settings()
         k = top_k or settings.top_k
+        # Minden kérdéshez bővebb kontextus — a részletes válaszhoz kell.
+        k = max(k, 20)
         if is_list_question(question):
-            k = max(k, 12)
+            k = max(k, 24)
+        if is_detailed_question(question):
+            k = max(k, 28)
 
         query_embedding = self.embeddings.embed_query(question)
         # Teljes agent-korpusz a hibridhez (kis KB), ne vágjuk le korán a listás chunkokat.
@@ -112,7 +117,55 @@ class RAGPipeline:
             )
         lexical_scored.sort(key=lambda m: m.score, reverse=True)
         candidates = merge_candidates(vector_all[: max(k * 8, 50)], lexical_scored[: max(k * 3, 20)])
-        return hybrid_rerank(question, candidates, top_k=k)
+        ranked = hybrid_rerank(question, candidates, top_k=k)
+        return self._expand_neighbors(ranked, window=1, max_total=40 if not is_detailed_question(question) else 48)
+
+    def _expand_neighbors(
+        self,
+        matches: list[VectorMatch],
+        *,
+        window: int = 1,
+        max_total: int = 48,
+    ) -> list[VectorMatch]:
+        """Szomszédos chunkok beemelése — folyamatos szabályszöveghez."""
+        if not matches or window <= 0:
+            return matches
+        by_id = {m.chunk_id: m for m in matches}
+        for seed in list(matches):
+            if len(by_id) >= max_total:
+                break
+            indices = [
+                seed.chunk_index + offset
+                for offset in range(-window, window + 1)
+                if seed.chunk_index + offset >= 0
+            ]
+            neighbors = self.store.get_chunks_by_indices(
+                agent_id=seed.agent_id,
+                document_id=seed.document_id,
+                indices=indices,
+            )
+            for neighbor in neighbors:
+                if neighbor.chunk_id in by_id:
+                    continue
+                by_id[neighbor.chunk_id] = VectorMatch(
+                    chunk_id=neighbor.chunk_id,
+                    agent_id=neighbor.agent_id,
+                    document_id=neighbor.document_id,
+                    document_name=neighbor.document_name,
+                    chunk_index=neighbor.chunk_index,
+                    text=neighbor.text,
+                    page_number=neighbor.page_number,
+                    sheet_name=neighbor.sheet_name,
+                    score=max(0.0, seed.score - 0.02),
+                )
+                if len(by_id) >= max_total:
+                    break
+        # Dokumentumon belüli sorrend: a modell összefüggő szabályt kapjon
+        ordered = sorted(
+            by_id.values(),
+            key=lambda m: (m.document_name, m.chunk_index, -m.score),
+        )
+        return ordered
 
     def build_context(self, matches: list[VectorMatch]) -> str:
         parts = []

@@ -67,7 +67,7 @@ if not exist "backend\.venv\Scripts\python.exe" (
 echo Python fuggosegek telepitese...
 backend\.venv\Scripts\python.exe -m pip install --upgrade pip
 REM Natív csomagokhoz Python 3.14 wheel kötelező (ne forrásból fordítson PyO3-mal).
-set "PIP_ONLY_BINARY=pydantic-core,orjson,pillow,numpy,greenlet,bcrypt,lxml,httptools,watchfiles,websockets"
+set "PIP_ONLY_BINARY=pydantic-core,orjson,pillow,numpy,greenlet,bcrypt,lxml,httptools,watchfiles,websockets,onnxruntime,opencv-python,shapely,pyclipper"
 backend\.venv\Scripts\python.exe -m pip install -r backend\requirements.txt -r backend\requirements-dev.txt
 if errorlevel 1 exit /b 1
 set "PIP_ONLY_BINARY="

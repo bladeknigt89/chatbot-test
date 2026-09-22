@@ -123,6 +123,57 @@ def make_pdf(text: str) -> bytes:
     return bytes(out)
 
 
+def make_image_pdf(text: str = "Example Kft") -> bytes:
+    from io import BytesIO
+
+    from PIL import Image, ImageDraw, ImageFont
+
+    image = Image.new("RGB", (1400, 480), "white")
+    draw = ImageDraw.Draw(image)
+    try:
+        font = ImageFont.truetype("arial.ttf", 56)
+    except OSError:
+        font = ImageFont.load_default()
+    draw.text((80, 180), text, fill="black", font=font)
+    jpeg = BytesIO()
+    image.save(jpeg, format="JPEG", quality=95)
+    jpeg_bytes = jpeg.getvalue()
+    width, height = image.size
+    image_obj = (
+        b"<< /Type /XObject /Subtype /Image /Width %d /Height %d /ColorSpace /DeviceRGB "
+        b"/BitsPerComponent 8 /Filter /DCTDecode /Length %d >>\nstream\n" % (width, height, len(jpeg_bytes))
+        + jpeg_bytes
+        + b"\nendstream"
+    )
+    content = f"q {width} 0 0 {height} 0 0 cm /Im0 Do Q".encode()
+    objects = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        (
+            b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 %d %d] /Contents 5 0 R "
+            b"/Resources << /XObject << /Im0 4 0 R >> >> >>" % (width, height)
+        ),
+        image_obj,
+        b"<< /Length %d >>\nstream\n" % len(content) + content + b"\nendstream",
+    ]
+    out = bytearray(b"%PDF-1.4\n")
+    offsets = [0]
+    for index, obj in enumerate(objects, start=1):
+        offsets.append(len(out))
+        out += f"{index} 0 obj\n".encode()
+        out += obj
+        out += b"\nendobj\n"
+    xref = len(out)
+    out += f"xref\n0 {len(objects) + 1}\n".encode()
+    out += b"0000000000 65535 f \n"
+    for offset in offsets[1:]:
+        out += f"{offset:010d} 00000 n \n".encode()
+    out += (
+        f"trailer << /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n".encode()
+    )
+    return bytes(out)
+
+
 def make_docx(paragraphs: list[str], tables: list[list[list[str]]] | None = None) -> bytes:
     from io import BytesIO
 
@@ -189,6 +240,7 @@ def app_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("STORAGE_PATH", str(storage))
     monkeypatch.setenv("LOG_PATH", str(logs))
     monkeypatch.setenv("CHAT_HISTORY_ENABLED", "true")
+    monkeypatch.setenv("OCR_ENABLED", "true")
     monkeypatch.setenv("MAX_FILE_SIZE", "1048576")
     from app.config import get_settings
     from app.embeddings import factory as embedding_factory

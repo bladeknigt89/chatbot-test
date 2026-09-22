@@ -7,7 +7,11 @@ RUN npm run build
 
 FROM python:3.14-slim
 WORKDIR /app
-RUN apt-get update && apt-get install -y --no-install-recommends build-essential \
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
+        tesseract-ocr \
+        tesseract-ocr-hun \
+        tesseract-ocr-eng \
     && rm -rf /var/lib/apt/lists/*
 COPY backend/requirements.txt /app/backend/requirements.txt
 RUN pip install --no-cache-dir -r /app/backend/requirements.txt

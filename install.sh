@@ -65,7 +65,7 @@ fi
 
 backend/.venv/bin/python -m pip install --upgrade pip
 # Natív csomagokhoz Python 3.14 wheel kötelező (ne forrásból fordítson PyO3-mal).
-export PIP_ONLY_BINARY="pydantic-core,orjson,pillow,numpy,greenlet,bcrypt,lxml,httptools,watchfiles,websockets"
+export PIP_ONLY_BINARY="pydantic-core,orjson,pillow,numpy,greenlet,bcrypt,lxml,httptools,watchfiles,websockets,onnxruntime,opencv-python,shapely,pyclipper"
 backend/.venv/bin/python -m pip install -r backend/requirements.txt -r backend/requirements-dev.txt
 unset PIP_ONLY_BINARY
 
