@@ -106,6 +106,21 @@ class SqliteVectorStore:
             conn.execute("DELETE FROM chunks WHERE agent_id = ?", (agent_id,))
             conn.commit()
 
+    def list_documents(self, agent_id: str) -> list[tuple[str, str]]:
+        """(document_id, document_name) párok az agenthez."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT document_id, document_name
+                FROM chunks
+                WHERE agent_id = ?
+                GROUP BY document_id, document_name
+                ORDER BY document_name
+                """,
+                (agent_id,),
+            ).fetchall()
+        return [(str(row["document_id"]), str(row["document_name"])) for row in rows]
+
     def list_chunks(self, agent_id: str) -> list[VectorMatch]:
         """Agent összes chunkja (lexikális hibridhez), score=0."""
         matches: list[VectorMatch] = []
@@ -142,6 +157,36 @@ class SqliteVectorStore:
             ).fetchall()
         return [self._row_to_match(row, score=0.0) for row in rows]
 
+    def search_text(
+        self,
+        *,
+        agent_id: str,
+        terms: list[str],
+        limit: int = 200,
+        document_ids: list[str] | None = None,
+    ) -> list[VectorMatch]:
+        """Gyors lexikális előszűrés SQL LIKE-kal — nem tölti be az összes embeddinget."""
+        cleaned = [t.strip().lower() for t in terms if t and len(t.strip()) >= 3][:8]
+        if not cleaned:
+            return []
+        clauses: list[str] = []
+        params: list[object] = [agent_id]
+        for term in cleaned:
+            like = f"%{term}%"
+            clauses.append("(lower(document_name) LIKE ? OR lower(text) LIKE ?)")
+            params.extend([like, like])
+        where = " OR ".join(clauses)
+        sql = f"SELECT * FROM chunks WHERE agent_id = ? AND ({where})"
+        if document_ids:
+            placeholders = ",".join("?" for _ in document_ids)
+            sql += f" AND document_id IN ({placeholders})"
+            params.extend(document_ids)
+        sql += " LIMIT ?"
+        params.append(max(1, int(limit)))
+        with self._connect() as conn:
+            rows = conn.execute(sql, params).fetchall()
+        return [self._row_to_match(row, score=0.45) for row in rows]
+
     def _row_to_match(self, row: sqlite3.Row, *, score: float) -> VectorMatch:
         return VectorMatch(
             chunk_id=row["id"],
@@ -161,36 +206,43 @@ class SqliteVectorStore:
         *,
         agent_id: str,
         top_k: int,
+        document_ids: list[str] | None = None,
     ) -> list[VectorMatch]:
         query = np.asarray(query_embedding, dtype=np.float32)
-        query_norm = np.linalg.norm(query) or 1.0
-        matches: list[VectorMatch] = []
+        query_norm = float(np.linalg.norm(query) or 1.0)
+        params: list[object] = [agent_id]
+        sql = "SELECT * FROM chunks WHERE agent_id = ?"
+        if document_ids:
+            unique_docs = list(dict.fromkeys(document_ids))
+            if not unique_docs:
+                return []
+            placeholders = ",".join("?" for _ in unique_docs)
+            sql += f" AND document_id IN ({placeholders})"
+            params.extend(unique_docs)
         with self._connect() as conn:
-            rows = conn.execute(
-                "SELECT * FROM chunks WHERE agent_id = ?",
-                (agent_id,),
-            ).fetchall()
-        for row in rows:
-            vector = np.frombuffer(row["embedding"], dtype=np.float32)
-            denom = (np.linalg.norm(vector) * query_norm) or 1.0
-            score = float(np.dot(vector, query) / denom)
-            matches.append(
-                VectorMatch(
-                    chunk_id=row["id"],
-                    agent_id=row["agent_id"],
-                    document_id=row["document_id"],
-                    document_name=row["document_name"],
-                    chunk_index=int(row["chunk_index"]),
-                    text=row["text"],
-                    page_number=row["page_number"],
-                    sheet_name=row["sheet_name"],
-                    score=score,
-                )
-            )
-        matches.sort(key=lambda item: item.score, reverse=True)
-        if top_k <= 0:
-            return matches
-        return matches[:top_k]
+            rows = conn.execute(sql, params).fetchall()
+        if not rows:
+            return []
+
+        matrix = np.vstack(
+            [np.frombuffer(row["embedding"], dtype=np.float32) for row in rows]
+        )
+        denom = (np.linalg.norm(matrix, axis=1) * query_norm) + 1e-12
+        scores = (matrix @ query) / denom
+
+        if top_k <= 0 or top_k >= len(rows):
+            order = np.argsort(-scores)
+        else:
+            # Részleges rendezés nagy korpuszhoz
+            k = min(int(top_k), len(rows))
+            part = np.argpartition(-scores, kth=k - 1)[:k]
+            order = part[np.argsort(-scores[part])]
+
+        matches: list[VectorMatch] = []
+        for idx in order:
+            row = rows[int(idx)]
+            matches.append(self._row_to_match(row, score=float(scores[int(idx)])))
+        return matches
 
 
 _store: SqliteVectorStore | None = None

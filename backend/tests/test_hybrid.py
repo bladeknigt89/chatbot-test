@@ -3,6 +3,7 @@ from app.rag.hybrid import (
     document_name_boost,
     hybrid_rerank,
     is_detailed_question,
+    is_document_inventory_question,
     keyword_score,
 )
 from app.vectorstore.store import VectorMatch
@@ -130,11 +131,64 @@ def test_is_detailed_question_detects_rules_requests():
     assert not is_detailed_question("Mi a vállalat neve?")
 
 
+def test_is_document_inventory_question():
+    assert is_document_inventory_question("milyen dokumentumai vannak az agentnek?")
+    assert is_document_inventory_question("What documents do you have?")
+    assert is_document_inventory_question("Sorold fel a feltöltött könyveket")
+    assert is_document_inventory_question("how many files are available?")
+    assert not is_document_inventory_question("Mi a próbaidő a munkaszabályzatban?")
+    assert not is_document_inventory_question("write me the detailed rules of legend of the five rings")
+
+
 def test_document_name_boost_prefers_core_rules():
     question = "write me the detailed rules of legend of the five rings"
     core = document_name_boost(question, "Legend Of The Five Rings 4e - Core Rules.pdf")
     history = document_name_boost(question, "Legend Of The Five Rings 4e - Imperial Histories.pdf")
     assert core > history
+
+
+def test_filename_topic_score_routes_fallout():
+    from app.rag.hybrid import filename_topic_score, rank_documents
+
+    question = "mit tudsz a fallout világáról?"
+    fallout = filename_topic_score("Fallout - Core Rulebook.pdf", question)
+    l5r = filename_topic_score("Legend Of The Five Rings 4e - Core Rules.pdf", question)
+    assert fallout > 0.5
+    assert fallout > l5r
+
+    fo = VectorMatch(
+        chunk_id="fo1",
+        agent_id="a1",
+        document_id="d-fo",
+        document_name="Fallout - Core Rulebook.pdf",
+        chunk_index=0,
+        text="The Great War left the world in ashes. Vault-Tec built vaults.",
+        page_number=1,
+        sheet_name=None,
+        score=0.55,
+    )
+    l5 = VectorMatch(
+        chunk_id="l51",
+        agent_id="a1",
+        document_id="d-l5r",
+        document_name="Legend Of The Five Rings 4e - Core Rules.pdf",
+        chunk_index=0,
+        text="Roll Ring + Skill Keep Trait.",
+        page_number=1,
+        sheet_name=None,
+        score=0.95,
+    )
+    ranked = rank_documents(
+        [l5, fo],
+        question,
+        document_catalog=[
+            ("d-l5r", "Legend Of The Five Rings 4e - Core Rules.pdf"),
+            ("d-fo", "Fallout - Core Rulebook.pdf"),
+            ("d-other", "Some Other RPG.pdf"),
+        ],
+    )
+    assert ranked[0][0] == "d-fo"
+    assert "Fallout" in ranked[0][1]
 
 
 def test_hybrid_rerank_raises_top_k_for_detailed_rules():

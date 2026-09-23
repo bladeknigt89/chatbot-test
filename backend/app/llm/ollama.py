@@ -4,6 +4,7 @@ import httpx
 
 from app.config import get_settings
 from app.llm.base import LLMProvider
+from app.llm.repetition import StreamRepetitionGuard, collapse_repetition
 
 
 class OllamaLLMProvider(LLMProvider):
@@ -17,6 +18,10 @@ class OllamaLLMProvider(LLMProvider):
         options: dict = {"temperature": temperature}
         if settings.llm_num_predict and settings.llm_num_predict > 0:
             options["num_predict"] = settings.llm_num_predict
+        # Qwen/kis modellek gyakran ismétlésbe esnek hosszú RAG válaszoknál
+        options["repeat_penalty"] = float(settings.llm_repeat_penalty)
+        if settings.llm_top_p > 0:
+            options["top_p"] = float(settings.llm_top_p)
         return options
 
     def generate(self, messages: list[dict[str, str]], temperature: float) -> str:
@@ -34,7 +39,8 @@ class OllamaLLMProvider(LLMProvider):
         content = message.get("content") or data.get("response") or ""
         if not content:
             raise RuntimeError("A helyi LLM üres választ adott.")
-        return content.strip()
+        cleaned, _ = collapse_repetition(content.strip())
+        return cleaned
 
     def stream(self, messages: list[dict[str, str]], temperature: float) -> Iterator[str]:
         payload = {
@@ -43,6 +49,7 @@ class OllamaLLMProvider(LLMProvider):
             "stream": True,
             "options": self._options(temperature),
         }
+        guard = StreamRepetitionGuard()
         with httpx.Client(timeout=self.timeout) as client:
             with client.stream("POST", f"{self.base_url}/api/chat", json=payload) as response:
                 response.raise_for_status()
@@ -56,5 +63,10 @@ class OllamaLLMProvider(LLMProvider):
                         break
                     message = data.get("message") or {}
                     token = message.get("content") or data.get("response") or ""
-                    if token:
-                        yield token
+                    if not token:
+                        continue
+                    out = guard.push(token)
+                    if out:
+                        yield out
+                    if guard.triggered:
+                        break

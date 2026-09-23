@@ -28,6 +28,8 @@ class Settings(BaseSettings):
     llm_model: str = "qwen2.5:7b"
     llm_temperature: float = 0.1
     llm_num_predict: int = 4096
+    llm_repeat_penalty: float = 1.25
+    llm_top_p: float = 0.9
     llm_skip_check: bool = False
 
     embedding_provider: str = "ollama"
@@ -42,6 +44,11 @@ class Settings(BaseSettings):
     chunk_size: int = 500
     chunk_overlap: int = 120
     top_k: int = 20
+    # 2-szintű retrieval: először top dokumentumok, aztán chunkok azokból
+    doc_route_top_n: int = 12
+    doc_route_min_n: int = 3
+    doc_route_coarse_k: int = 120
+    chunks_per_routed_doc: int = 24
 
     chat_history_enabled: bool = True
     ocr_enabled: bool = True

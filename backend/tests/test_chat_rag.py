@@ -58,6 +58,34 @@ def test_agent_isolation(admin_client: TestClient):
     assert "12345" not in answer_b
 
 
+def test_document_inventory_lists_all_ready_docs(admin_client: TestClient):
+    agent = admin_client.post("/api/agents", json={"name": "Lib"}).json()
+    for name, text in [
+        ("Alpha Handbook.pdf", "Alpha handbook unique phrase ALPHA_DOC_MARKER."),
+        ("Beta Codex.pdf", "Beta codex unique phrase BETA_DOC_MARKER."),
+        ("Gamma Rules.pdf", "Gamma rules unique phrase GAMMA_DOC_MARKER."),
+    ]:
+        admin_client.post(
+            f"/api/agents/{agent['id']}/documents",
+            files={"file": (name, make_pdf(text), "application/pdf")},
+        )
+    drain_jobs()
+    response = admin_client.post(
+        f"/api/chat/{agent['id']}",
+        json={"message": "Milyen dokumentumai vannak?", "stream": False},
+    )
+    assert response.status_code == 200, response.text
+    message = response.json()["message"]
+    assert "Alpha Handbook.pdf" in message
+    assert "Beta Codex.pdf" in message
+    assert "Gamma Rules.pdf" in message
+    assert "3" in message
+    sources = response.json()["sources"]
+    assert len(sources) == 3
+    names = {item["document_name"] for item in sources}
+    assert names == {"Alpha Handbook.pdf", "Beta Codex.pdf", "Gamma Rules.pdf"}
+
+
 def test_hungarian_questions(admin_client: TestClient):
     agent = admin_client.post("/api/agents", json={"name": "HU"}).json()
     admin_client.post(

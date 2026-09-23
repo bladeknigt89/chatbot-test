@@ -21,8 +21,10 @@ Answer style for EVERY question (mandatory when excerpts exist):
 - Structure the reply with clear sections/headings when there is more than one point.
 - Include concrete details from the excerpts: numbers, thresholds, named terms, steps, conditions, exceptions, examples, definitions.
 - Explain how things work, not only what they are called or which book they appear in.
-- Exhaust the relevant excerpts: if several passages apply, weave them into one coherent detailed answer.
-- For lists: enumerate EVERY matching item found in the excerpts; do not stop after one or two examples.
+- Cover the relevant excerpts once: if several passages apply, weave them into one coherent detailed answer.
+- For lists: enumerate each distinct matching item found in the excerpts; do not stop after one or two examples.
+- Never repeat the same phrase, bullet, clause, or list item. If you have no new distinct content, stop immediately.
+- Do not pad, loop, or restate the same wording with tiny variations.
 - For rules, mechanics, procedures, or any “how does X work / write the rules / explain” request:
   - Write a structured summary of all related rules found in the excerpts.
   - Keep numbers and named terms exact; paraphrase the rest clearly.
@@ -39,8 +41,9 @@ _USER_ANSWER_INSTRUCTIONS = (
     "If they are not sufficient, use the insufficient-information sentence. "
     "Otherwise you MUST answer in detail for this question (and for every question): "
     "structured sections where useful; include steps, numbers, named terms, conditions, examples, "
-    "and every matching list item from the excerpts. "
-    "Never give a short reply or only a document/book title when the excerpts contain more information."
+    "and every distinct matching list item from the excerpts. "
+    "Never give a short reply or only a document/book title when the excerpts contain more information. "
+    "Never repeat the same phrase or list item; stop when the distinct content ends."
 )
 
 
@@ -88,3 +91,36 @@ def looks_hungarian(text: str) -> bool:
 
 def no_info_reply(question: str) -> str:
     return NO_INFO_HU if looks_hungarian(question) else NO_INFO_EN
+
+
+def format_document_inventory(
+    question: str,
+    documents: list[tuple[str, str, int]],
+) -> str:
+    """Teljes dokumentumlista — nem RAG-ből, hanem az agent DB katalógusából."""
+    hungarian = looks_hungarian(question)
+    if not documents:
+        if hungarian:
+            return "Az agent tudásbázisában jelenleg nincs feldolgozott (READY) dokumentum."
+        return "This agent currently has no processed (READY) documents."
+
+    if hungarian:
+        lines = [
+            f"Az agent tudásbázisában jelenleg {len(documents)} feldolgozott dokumentum van:",
+            "",
+        ]
+        for index, (_doc_id, name, chunks) in enumerate(documents, start=1):
+            lines.append(f"{index}. {name} ({chunks} chunk)")
+        lines.append("")
+        lines.append("Ez a teljes lista — minden READY státuszú feltöltött fájl szerepel.")
+        return "\n".join(lines)
+
+    lines = [
+        f"This agent currently has {len(documents)} processed documents:",
+        "",
+    ]
+    for index, (_doc_id, name, chunks) in enumerate(documents, start=1):
+        lines.append(f"{index}. {name} ({chunks} chunks)")
+    lines.append("")
+    lines.append("This is the complete catalog — every READY uploaded file is included.")
+    return "\n".join(lines)

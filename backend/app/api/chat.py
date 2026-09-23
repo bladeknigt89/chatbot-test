@@ -13,9 +13,11 @@ from app.database import get_db, get_session_factory
 from app.deps import AuthContext, get_auth_context
 from app.embeddings.factory import get_embedding_provider
 from app.llm.factory import get_llm_provider
-from app.models import Agent, ChatMessage, ChatSession
+from app.models import Agent, ChatMessage, ChatSession, Document
 from app.rag.pipeline import RAGPipeline
-from app.rag.prompts import build_messages, no_info_reply
+from app.rag.hybrid import is_document_inventory_question
+from app.rag.prompts import build_messages, format_document_inventory, no_info_reply
+from app.llm.repetition import collapse_repetition
 from app.rate_limit import limiter
 from app.schemas import ChatRequest, ChatResponse, ChatSource
 from app.vectorstore.store import get_vector_store
@@ -26,6 +28,35 @@ router = APIRouter(tags=["Chat"])
 
 def _pipeline() -> RAGPipeline:
     return RAGPipeline(get_embedding_provider(), get_llm_provider(), get_vector_store())
+
+
+def _ready_documents(db: Session, agent_id: str) -> list[Document]:
+    return (
+        db.query(Document)
+        .filter(Document.agent_id == agent_id, Document.status == "READY")
+        .order_by(Document.original_filename.asc())
+        .all()
+    )
+
+
+def _inventory_answer(db: Session, agent_id: str, question: str, *, include_sources: bool) -> tuple[str, list[ChatSource]]:
+    docs = _ready_documents(db, agent_id)
+    catalog = [(doc.id, doc.original_filename, int(doc.chunk_count or 0)) for doc in docs]
+    answer = format_document_inventory(question, catalog)
+    sources: list[ChatSource] = []
+    if include_sources:
+        for doc in docs:
+            sources.append(
+                ChatSource(
+                    document_id=doc.id,
+                    document_name=doc.original_filename,
+                    chunk_index=0,
+                    page_number=None,
+                    sheet_name=None,
+                    score=1.0,
+                )
+            )
+    return answer, sources
 
 
 def _active_agent(db: Session, agent_id: str) -> Agent:
@@ -116,6 +147,47 @@ def chat(
         details="message_length=%s" % len(question),
         request=request,
     )
+
+    if is_document_inventory_question(question):
+        answer, sources = _inventory_answer(db, agent_pk, question, include_sources=include_sources)
+        if payload.stream:
+
+            def inventory_stream() -> Iterator[bytes]:
+                yield _sse_bytes("token", {"text": answer})
+                store_db = get_session_factory()()
+                try:
+                    _maybe_store(
+                        store_db,
+                        session_id=session_pk,
+                        agent_id=agent_pk,
+                        user_message=question,
+                        assistant_message=answer,
+                        sources=sources,
+                    )
+                finally:
+                    store_db.close()
+                yield _sse_bytes("sources", [item.model_dump() for item in sources])
+                yield _sse_bytes("done", {"session_id": session_pk, "message": answer})
+
+            return StreamingResponse(
+                inventory_stream(),
+                media_type="text/event-stream",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "Connection": "keep-alive",
+                    "X-Accel-Buffering": "no",
+                },
+            )
+        _maybe_store(
+            db,
+            session_id=session_pk,
+            agent_id=agent_pk,
+            user_message=question,
+            assistant_message=answer,
+            sources=sources,
+        )
+        return ChatResponse(session_id=session_pk, message=answer, sources=sources)
+
     pipeline = _pipeline()
     if payload.stream:
 
@@ -140,6 +212,7 @@ def chat(
                         chunks.append(token)
                         yield _sse_bytes("token", {"text": token})
                 answer = "".join(chunks).strip()
+                answer, _ = collapse_repetition(answer)
                 store_db = get_session_factory()()
                 try:
                     _maybe_store(

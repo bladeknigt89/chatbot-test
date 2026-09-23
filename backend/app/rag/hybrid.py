@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections import defaultdict
 
 from app.rag.hu_morph import (
     expand_query_tokens,
@@ -29,6 +30,50 @@ _DETAILED_QUESTION = re.compile(
     re.IGNORECASE,
 )
 
+_DOC_INVENTORY = re.compile(
+    r"("
+    r"dokumentum|fajlok?|konyvek?|feltoltott|\bpdf\b|"
+    r"\bdocuments?\b|\bfiles?\b|\bbooks?\b|\buploads?\b|knowledge\s*base"
+    r")",
+    re.IGNORECASE,
+)
+
+_DOC_INVENTORY_INTENT = re.compile(
+    r"("
+    r"milyen|melyek|melyik|sorol|felsorol|listaz|mutasd|nevez|mik\b|hany\b|"
+    r"\bvan\b|\bvannak\b|osszes|rendelkezes|"
+    r"\bwhat\b|\bwhich\b|\blist\b|\bshow\b|how\s+many|\bavailable\b|\bhave\b|\bhas\b|\bcontains?\b"
+    r")",
+    re.IGNORECASE,
+)
+
+# Gyakori kérdés-szavak, amelyek nem témakijelölők a fájlnév-együttálláshoz
+_TOPIC_STOP = {
+    "mit",
+    "mi",
+    "tudsz",
+    "mondj",
+    "mesel",
+    "meselj",
+    "irok",
+    "irj",
+    "keresek",
+    "kell",
+    "lenne",
+    "volna",
+    "vilag",
+    "world",
+    "about",
+    "what",
+    "know",
+    "tell",
+    "write",
+    "please",
+    "nekem",
+    "roviden",
+    "reszletesen",
+}
+
 # Téma-bónusz: kérdés-tő → dokumentum-jelzők (általános, nem csak egy-egy szó).
 _TOPIC_MARKERS: tuple[tuple[str, tuple[str, ...], float], ...] = (
     ("tortenet", ("tortenet", "jogelod", "alapit"), 0.4),
@@ -52,8 +97,65 @@ def is_detailed_question(question: str) -> bool:
     return bool(_DETAILED_QUESTION.search(fold_accents(question)))
 
 
+def is_document_inventory_question(question: str) -> bool:
+    """„Milyen dokumentumai vannak?” / „what documents do you have?” — a teljes katalógus kell."""
+    folded = fold_accents(question)
+    if not _DOC_INVENTORY.search(folded):
+        return False
+    if _DOC_INVENTORY_INTENT.search(folded):
+        return True
+    # Rövid formák: „dokumentumok?” „list of documents”
+    return bool(
+        re.search(
+            r"^(a\s+)?(dokumentumok|fajlok|konyvek|documents?|files?|books?)\??$",
+            folded.strip(),
+            re.IGNORECASE,
+        )
+    )
+
+
+def query_topic_terms(question: str) -> list[str]:
+    """Témakijelölő tokenek a kérdésből (SQL lexikális + fájlnév routing)."""
+    terms: list[str] = []
+    for tok in tokenize(question):
+        folded = fold_accents(tok)
+        if len(folded) < 3 or folded in _TOPIC_STOP:
+            continue
+        terms.append(folded)
+    # Egyedi, sorrend megtartva
+    seen: set[str] = set()
+    out: list[str] = []
+    for t in terms:
+        if t not in seen:
+            seen.add(t)
+            out.append(t)
+    return out[:10]
+
+
+def filename_topic_score(document_name: str, question: str) -> float:
+    """Fájlnév ↔ kérdés témaegyezés (pl. Fallout Core Rulebook + „fallout világáról”)."""
+    terms = query_topic_terms(question)
+    if not terms:
+        return 0.0
+    name = fold_accents(document_name.lower().replace("_", " ").replace("-", " "))
+    name_tokens = set(tokenize(document_name))
+    hits = 0.0
+    for term in terms:
+        if term in name:
+            hits += 1.0
+            continue
+        if any(tokens_match(term, nt) or term in fold_accents(nt) for nt in name_tokens):
+            hits += 1.0
+            continue
+        if len(term) >= 5 and any(term[:4] in fold_accents(nt) for nt in name_tokens):
+            hits += 0.5
+    if hits <= 0:
+        return 0.0
+    return min(1.0, hits / max(1.0, len(terms) * 0.55))
+
+
 def document_name_boost(question: str, document_name: str) -> float:
-    """Dokumentumnév-együttállás (pl. rules → Core Rules)."""
+    """Dokumentumnév-együttállás (pl. rules → Core Rules, fallout → Fallout …)."""
     q = fold_accents(question.lower())
     name = fold_accents(document_name.lower().replace("_", " ").replace("-", " "))
     boost = 0.0
@@ -68,6 +170,8 @@ def document_name_boost(question: str, document_name: str) -> float:
     if "legend of the five rings" in q or re.search(r"\bl5r\b", q):
         if "legend of the five rings" in name or "l5r" in name:
             boost += 0.12
+    # Általános fájlnév ↔ kérdés téma (többszáz dokumentumos agentekhez)
+    boost += 0.55 * filename_topic_score(document_name, question)
     return boost
 
 
@@ -197,3 +301,70 @@ def merge_candidates(*groups: list[VectorMatch]) -> list[VectorMatch]:
             if prev is None or match.score > prev.score:
                 best[match.chunk_id] = match
     return list(best.values())
+
+
+def diversify_by_document(
+    matches: list[VectorMatch],
+    *,
+    limit: int,
+    max_per_doc: int = 6,
+) -> list[VectorMatch]:
+    """Ne egyetlen fájl uralja a top-K-t — több releváns dokumentumból vegyen."""
+    if limit <= 0 or not matches:
+        return []
+    per_doc: dict[str, int] = defaultdict(int)
+    selected: list[VectorMatch] = []
+    deferred: list[VectorMatch] = []
+    for m in matches:
+        if per_doc[m.document_id] < max_per_doc:
+            selected.append(m)
+            per_doc[m.document_id] += 1
+            if len(selected) >= limit:
+                return selected
+        else:
+            deferred.append(m)
+    for m in deferred:
+        if len(selected) >= limit:
+            break
+        selected.append(m)
+    return selected
+
+
+def rank_documents(
+    matches: list[VectorMatch],
+    question: str,
+    *,
+    document_catalog: list[tuple[str, str]] | None = None,
+) -> list[tuple[str, str, float]]:
+    """
+    Dokumentum-szintű routing score.
+    Vissza: (document_id, document_name, score) csökkenő sorrendben.
+    """
+    by_doc: dict[str, list[VectorMatch]] = defaultdict(list)
+    names: dict[str, str] = {}
+    for m in matches:
+        by_doc[m.document_id].append(m)
+        names[m.document_id] = m.document_name
+
+    if document_catalog:
+        for doc_id, doc_name in document_catalog:
+            names.setdefault(doc_id, doc_name)
+            by_doc.setdefault(doc_id, [])
+
+    ranked: list[tuple[str, str, float]] = []
+    for doc_id, chunks in by_doc.items():
+        name = names.get(doc_id, doc_id)
+        fn = filename_topic_score(name, question)
+        if chunks:
+            top_scores = sorted((float(c.score) for c in chunks), reverse=True)[:5]
+            avg_top = sum(top_scores) / len(top_scores)
+            best = top_scores[0]
+            coverage = min(1.0, len(chunks) / 8.0)
+            score = (0.45 * best) + (0.25 * avg_top) + (0.40 * fn) + (0.08 * coverage)
+        else:
+            score = 0.65 * fn
+        if score > 0.02 or fn > 0:
+            ranked.append((doc_id, name, score))
+
+    ranked.sort(key=lambda x: x[2], reverse=True)
+    return ranked

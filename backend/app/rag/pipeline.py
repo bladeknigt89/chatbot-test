@@ -81,7 +81,14 @@ class RAGPipeline:
         return indexed
 
     def retrieve(self, *, agent_id: str, question: str, top_k: int | None = None) -> list[VectorMatch]:
-        from app.rag.hybrid import hybrid_rerank, keyword_score, merge_candidates
+        from app.rag.hybrid import (
+            diversify_by_document,
+            hybrid_rerank,
+            keyword_score,
+            merge_candidates,
+            query_topic_terms,
+            rank_documents,
+        )
 
         settings = get_settings()
         k = top_k or settings.top_k
@@ -92,15 +99,30 @@ class RAGPipeline:
         if is_detailed_question(question):
             k = max(k, 28)
 
+        catalog = self.store.list_documents(agent_id)
+        if not catalog:
+            return []
+
         query_embedding = self.embeddings.embed_query(question)
-        # Teljes agent-korpusz a hibridhez (kis KB), ne vágjuk le korán a listás chunkokat.
-        vector_all = self.store.search(query_embedding, agent_id=agent_id, top_k=0)
-        lexical = self.store.list_chunks(agent_id)
-        # Lexikális előszűrés: a legjobb kulcsszó-találatok kapjanak minimális vektor-score pad-et
+        terms = query_topic_terms(question)
+
+        # --- 1. szint: dokumentum-routing (ne csak a globális top chunkok fájljai) ---
+        coarse_k = max(settings.doc_route_coarse_k, k * 4)
+        coarse_vector = self.store.search(
+            query_embedding,
+            agent_id=agent_id,
+            top_k=coarse_k,
+        )
+        coarse_lexical = self.store.search_text(
+            agent_id=agent_id,
+            terms=terms,
+            limit=max(200, coarse_k),
+        )
+        # Lexikális találatoknak adjunk alap score-t a keyword_score alapján
         lexical_scored: list[VectorMatch] = []
-        for item in lexical:
-            kw = keyword_score(question, item.text)
-            if kw < 0.15:
+        for item in coarse_lexical:
+            kw = keyword_score(question, f"{item.document_name} {item.text}")
+            if kw < 0.08 and not any(t in (item.document_name or "").lower() for t in terms):
                 continue
             lexical_scored.append(
                 VectorMatch(
@@ -115,10 +137,62 @@ class RAGPipeline:
                     score=max(0.35, kw),
                 )
             )
-        lexical_scored.sort(key=lambda m: m.score, reverse=True)
-        candidates = merge_candidates(vector_all[: max(k * 8, 50)], lexical_scored[: max(k * 3, 20)])
-        ranked = hybrid_rerank(question, candidates, top_k=k)
-        return self._expand_neighbors(ranked, window=1, max_total=40 if not is_detailed_question(question) else 48)
+
+        route_pool = merge_candidates(coarse_vector, lexical_scored)
+        doc_ranked = rank_documents(route_pool, question, document_catalog=catalog)
+        route_n = max(settings.doc_route_min_n, min(settings.doc_route_top_n, len(doc_ranked) or 1))
+        # Ha a fájlnév erősen egyezik, tartsuk meg az összes ilyen dokumentumot (max route_n*2)
+        strong = [d for d in doc_ranked if d[2] >= 0.35]
+        if strong:
+            routed_ids = [d[0] for d in strong[: max(route_n, min(len(strong), route_n * 2))]]
+        else:
+            routed_ids = [d[0] for d in doc_ranked[:route_n]]
+        if not routed_ids:
+            routed_ids = [doc_id for doc_id, _ in catalog[:route_n]]
+
+        # --- 2. szint: mély keresés csak a kiválasztott dokumentumokban ---
+        per_doc = max(settings.chunks_per_routed_doc, k)
+        deep_vector = self.store.search(
+            query_embedding,
+            agent_id=agent_id,
+            top_k=per_doc * max(1, len(routed_ids)),
+            document_ids=routed_ids,
+        )
+        deep_lexical = self.store.search_text(
+            agent_id=agent_id,
+            terms=terms,
+            limit=max(150, per_doc * 2),
+            document_ids=routed_ids,
+        )
+        deep_lex_scored: list[VectorMatch] = []
+        for item in deep_lexical:
+            kw = keyword_score(question, f"{item.document_name} {item.text}")
+            deep_lex_scored.append(
+                VectorMatch(
+                    chunk_id=item.chunk_id,
+                    agent_id=item.agent_id,
+                    document_id=item.document_id,
+                    document_name=item.document_name,
+                    chunk_index=item.chunk_index,
+                    text=item.text,
+                    page_number=item.page_number,
+                    sheet_name=item.sheet_name,
+                    score=max(0.35, kw),
+                )
+            )
+
+        candidates = merge_candidates(deep_vector, deep_lex_scored, route_pool)
+        # Csak a routed dokumentumok chunkjai menjenek tovább (ne szivárogjon be irreleváns top globális)
+        routed_set = set(routed_ids)
+        candidates = [m for m in candidates if m.document_id in routed_set]
+        ranked = hybrid_rerank(question, candidates, top_k=max(k, per_doc))
+        diversified = diversify_by_document(
+            ranked,
+            limit=k,
+            max_per_doc=max(4, k // max(1, min(len(routed_ids), 4))),
+        )
+        max_total = 40 if not is_detailed_question(question) else 48
+        return self._expand_neighbors(diversified, window=1, max_total=max_total)
 
     def _expand_neighbors(
         self,
