@@ -46,10 +46,9 @@ if [ "$OLLAMA_RC" -ne 0 ]; then
   echo "Folytatás a többi komponenssel..."
 fi
 
-if [ ! -f .env ]; then
-  cp .env.example .env
-  echo ".env létrehozva."
-fi
+echo
+echo "=== .env szinkron (.env.example hiányzó kulcsok) ==="
+"$PYEXE" scripts/merge_env.py || echo "FIGYELEM: .env összevetés sikertelen."
 
 if [ -x backend/.venv/bin/python ]; then
   if ! backend/.venv/bin/python -c 'import sys; raise SystemExit(0 if sys.version_info[:2]==(3,14) else 1)'; then

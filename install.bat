@@ -46,9 +46,11 @@ if errorlevel 1 (
   echo Folytatas a tobbi komponenssel...
 )
 
-if not exist ".env" (
-  copy /Y ".env.example" ".env" >nul
-  echo .env letrehozva az .env.example alapjan.
+echo.
+echo === .env szinkron (.env.example hianyzo kulcsok) ===
+%PYEXE% scripts\merge_env.py
+if errorlevel 1 (
+  echo FIGYELEM: .env osszevetes sikertelen.
 )
 
 if exist "backend\.venv\Scripts\python.exe" (

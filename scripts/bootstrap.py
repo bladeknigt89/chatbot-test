@@ -27,10 +27,18 @@ def main() -> int:
     args = parser.parse_args()
 
     env_file = ROOT / ".env"
-    example = ROOT / ".env.example"
-    if not env_file.exists() and example.exists():
-        env_file.write_text(example.read_text(encoding="utf-8"), encoding="utf-8")
-        print("Created .env from .env.example")
+    existed = env_file.is_file()
+    scripts_dir = ROOT / "scripts"
+    if str(scripts_dir) not in sys.path:
+        sys.path.insert(0, str(scripts_dir))
+    from merge_env import merge_env_from_example  # noqa: E402
+
+    added = merge_env_from_example()
+    if added:
+        if not existed:
+            print("Created .env from .env.example")
+        else:
+            print(f"Updated .env with missing keys: {', '.join(added)}")
 
     get_settings.cache_clear()
     settings = get_settings()
