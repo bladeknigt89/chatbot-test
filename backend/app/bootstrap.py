@@ -132,6 +132,14 @@ def ensure_llm_ready(settings: Settings | None = None, pull: bool = True) -> Non
     needed = []
     if settings.llm_provider == "ollama" and not model_installed(status["models"], settings.llm_model):
         needed.append((settings.llm_model, settings.llm_base_url))
+    polish_model = (settings.llm_polish_model or "").strip()
+    if (
+        settings.llm_polish_enabled
+        and polish_model
+        and polish_model != settings.llm_model
+        and not model_installed(status["models"], polish_model)
+    ):
+        needed.append((polish_model, settings.llm_base_url))
     if settings.embedding_provider == "ollama" and not model_installed(
         status["models"], settings.embedding_model
     ):

@@ -3,6 +3,8 @@ NO_INFO_HU = (
 )
 NO_INFO_EN = "The available documents do not contain enough information to answer this question."
 
+import re
+
 GLOBAL_RAG_SYSTEM = """You are a document-grounded assistant for a local RAG chatbot.
 
 Grounding rules (never break these):
@@ -10,7 +12,7 @@ Grounding rules (never break these):
 - Do not invent facts, numbers, names, dates, rules, or sources.
 - Do not use outside knowledge or assumptions.
 - Never fabricate citations.
-- Answer in the user's language.
+- Answer in the user's language, except when a later translation step is requested in the user instructions — then follow those instructions exactly.
 - If the excerpts are missing or truly insufficient, reply with exactly this Hungarian sentence when the user wrote in Hungarian:
   "A rendelkezésre álló dokumentumok alapján erre nem található megfelelő információ."
 - If the user wrote in English and the excerpts are insufficient, reply with exactly:
@@ -47,6 +49,20 @@ _USER_ANSWER_INSTRUCTIONS = (
     "Never repeat the same phrase or list item; stop when the distinct content ends."
 )
 
+_USER_ANSWER_INSTRUCTIONS_HU = (
+    "Answer only from the excerpts above. "
+    "If they are not sufficient, use the insufficient-information sentence "
+    '(exactly: "A rendelkezésre álló dokumentumok alapján erre nem található megfelelő információ."). '
+    "Otherwise you MUST answer in detail for this question: "
+    "structured sections where useful; include steps, numbers, named terms, conditions, examples, "
+    "and every distinct matching list item from the excerpts. "
+    "CRITICAL LANGUAGE RULE: Write the entire draft in clear, simple English only. "
+    "Do NOT write Hungarian in this draft — a dedicated translator will convert it to Hungarian next. "
+    "Never repeat the same phrase or list item; stop when the distinct content ends. "
+    "Stay on topic for the user question; do not drag in unrelated salary or career figures "
+    "unless the question explicitly asks about pay or careers."
+)
+
 
 def build_messages(
     *,
@@ -59,6 +75,9 @@ def build_messages(
     system = GLOBAL_RAG_SYSTEM
     if extra:
         system += "\n\nAgent-specific instructions:\n" + extra
+    instructions = (
+        _USER_ANSWER_INSTRUCTIONS_HU if looks_hungarian(question) else _USER_ANSWER_INSTRUCTIONS
+    )
     if not has_context:
         user = (
             "No document excerpts were retrieved for this question.\n"
@@ -70,7 +89,7 @@ def build_messages(
             "Document excerpts:\n"
             f"{context}\n\n"
             f"User question:\n{question}\n\n"
-            f"{_USER_ANSWER_INSTRUCTIONS}"
+            f"{instructions}"
         )
     return [
         {"role": "system", "content": system},
@@ -79,15 +98,54 @@ def build_messages(
 
 
 def looks_hungarian(text: str) -> bool:
-    lowered = text.lower()
-    markers = [
-        "á", "é", "í", "ó", "ö", "ő", "ú", "ü", "ű",
-        " mi ", " mennyi", " milyen", " hol ", " mikor",
-        " foglald", " szerződés", " szabadság", " dokumentum",
-    ]
-    return any(marker in lowered for marker in markers) or any(
-        ch in text for ch in "áéíóöőúüűÁÉÍÓÖŐÚÜŰ"
+    from app.rag.hu_morph import fold_accents
+
+    if any(ch in text for ch in "áéíóöőúüűÁÉÍÓÖŐÚÜŰ"):
+        return True
+    folded = fold_accents((text or "").lower())
+    # Szóközzel határolt gyakori magyar kérdés/utasítás-szavak (ékezet nélkül is)
+    markers = (
+        " hogyan ",
+        " miert ",
+        " mikor ",
+        " honnan ",
+        " hova ",
+        " mennyi ",
+        " milyen ",
+        " melyik ",
+        " melyek ",
+        " foglald ",
+        " ismertesd ",
+        " magyarazd ",
+        " magyaraz ",
+        " meselj ",
+        " mondj ",
+        " tudsz ",
+        " ismersz ",
+        " sajatits ",
+        " tanul ",
+        " tanuld ",
+        " kerdes ",
+        " valasz ",
+        " dokumentum ",
+        " szabalyzat ",
+        " vilag ",
+        " vilagat ",
+        " vilagarol ",
+        " rendszer ",
+        " szerepjatek ",
+        " nekunk ",
+        " nekem ",
+        " kerlek ",
+        " eleg ",
+        " roviden ",
+        " reszletesen ",
     )
+    padded = f" {folded} "
+    if any(m in padded for m in markers):
+        return True
+    # Rövid „Mi …?” / „Mit …?” kérdések
+    return bool(re.search(r"(^|\s)(mi|mit|mik)\b", folded))
 
 
 def no_info_reply(question: str) -> str:

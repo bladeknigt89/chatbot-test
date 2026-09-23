@@ -12,17 +12,11 @@ from app.config import get_settings
 from app.database import get_db, get_session_factory
 from app.deps import AuthContext, get_auth_context
 from app.embeddings.factory import get_embedding_provider
-from app.llm.factory import get_llm_provider
+from app.llm.factory import get_llm_provider, get_polish_llm_provider
 from app.models import Agent, ChatMessage, ChatSession, Document
 from app.rag.pipeline import RAGPipeline
 from app.rag.hybrid import is_document_inventory_question, is_knowledge_catalog_question
-from app.rag.prompts import (
-    build_messages,
-    format_document_inventory,
-    format_knowledge_catalog,
-    no_info_reply,
-)
-from app.llm.repetition import collapse_repetition
+from app.rag.prompts import format_document_inventory, format_knowledge_catalog, no_info_reply
 from app.rate_limit import limiter
 from app.schemas import ChatRequest, ChatResponse, ChatSource
 from app.vectorstore.store import get_vector_store
@@ -32,7 +26,12 @@ router = APIRouter(tags=["Chat"])
 
 
 def _pipeline() -> RAGPipeline:
-    return RAGPipeline(get_embedding_provider(), get_llm_provider(), get_vector_store())
+    return RAGPipeline(
+        get_embedding_provider(),
+        get_llm_provider(),
+        get_vector_store(),
+        polish_llm=get_polish_llm_provider(),
+    )
 
 
 def _ready_documents(db: Session, agent_id: str) -> list[Document]:
@@ -256,26 +255,20 @@ def chat(
 
         def event_stream() -> Iterator[bytes]:
             try:
-                chunks: list[str] = []
-                matches = pipeline.retrieve(agent_id=agent_pk, question=question)
-                sources = pipeline._sources(matches) if include_sources else []
-                if not matches:
+                result = pipeline.answer(
+                    agent_id=agent_pk,
+                    question=question,
+                    agent_system_prompt=agent_prompt,
+                    include_sources=include_sources,
+                )
+                answer = result.answer
+                sources = result.sources
+                # Javított választ chunkolva küldjük (polish után)
+                step = 48
+                if not answer:
                     answer = no_info_reply(question)
-                    chunks.append(answer)
-                    yield _sse_bytes("token", {"text": answer})
-                else:
-                    context = pipeline.build_context(matches)
-                    messages = build_messages(
-                        question=question,
-                        context=context,
-                        agent_system_prompt=agent_prompt,
-                        has_context=True,
-                    )
-                    for token in pipeline._llm().stream(messages, get_settings().llm_temperature):
-                        chunks.append(token)
-                        yield _sse_bytes("token", {"text": token})
-                answer = "".join(chunks).strip()
-                answer, _ = collapse_repetition(answer)
+                for i in range(0, len(answer), step):
+                    yield _sse_bytes("token", {"text": answer[i : i + step]})
                 store_db = get_session_factory()()
                 try:
                     _maybe_store(

@@ -25,12 +25,17 @@ class Settings(BaseSettings):
 
     llm_provider: str = "ollama"
     llm_base_url: str = "http://127.0.0.1:11434"
-    llm_model: str = "qwen2.5:7b"
+    # RAG vázlat + magyar fordítás: llama3.1:8b (RTX 3060 12GB).
+    # Opcionális HU modell: puli-llumix (scripts/Modelfile.puli-llumix).
+    llm_model: str = "llama3.1:8b"
     llm_temperature: float = 0.15
     llm_num_predict: int = 2048
     llm_repeat_penalty: float = 1.4
     llm_top_p: float = 0.85
     llm_skip_check: bool = False
+    llm_polish_enabled: bool = True
+    llm_polish_model: str = "llama3.1:8b"
+    llm_polish_temperature: float = 0.1
 
     embedding_provider: str = "ollama"
     embedding_model: str = "nomic-embed-text"

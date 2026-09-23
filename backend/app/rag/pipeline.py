@@ -7,9 +7,11 @@ from app.documents.chunking import Chunk
 from app.embeddings.base import EmbeddingProvider
 from app.llm.base import LLMProvider
 from app.rag.hybrid import is_detailed_question, is_list_question
+from app.rag.polish import polish_answer
 from app.rag.prompts import build_messages, no_info_reply
 from app.schemas import ChatSource
 from app.vectorstore.store import SqliteVectorStore, VectorMatch
+from app.llm.repetition import collapse_repetition
 
 
 @dataclass
@@ -25,15 +27,34 @@ class RAGPipeline:
         embeddings: EmbeddingProvider,
         llm: LLMProvider | None,
         store: SqliteVectorStore,
+        polish_llm: LLMProvider | None = None,
     ) -> None:
         self.embeddings = embeddings
         self.llm = llm
+        self.polish_llm = polish_llm
         self.store = store
 
     def _llm(self) -> LLMProvider:
         if self.llm is None:
             raise RuntimeError("A helyi LLM nincs inicializálva.")
         return self.llm
+
+    def _polish_llm(self) -> LLMProvider:
+        return self.polish_llm or self._llm()
+
+    def _finalize_answer(self, *, question: str, draft: str) -> str:
+        settings = get_settings()
+        text, _ = collapse_repetition(draft.strip())
+        if not settings.llm_polish_enabled:
+            return text
+        polished = polish_answer(
+            self._polish_llm(),
+            question=question,
+            draft=text,
+            temperature=settings.llm_polish_temperature,
+        )
+        polished, _ = collapse_repetition(polished)
+        return polished
 
     def index_chunks(
         self,
@@ -272,9 +293,10 @@ class RAGPipeline:
             has_context=True,
         )
         settings = get_settings()
-        answer = self._llm().generate(messages, temperature=settings.llm_temperature)
+        draft = self._llm().generate(messages, temperature=settings.llm_temperature)
+        answer = self._finalize_answer(question=question, draft=draft)
         sources = self._sources(matches) if include_sources else []
-        return RAGResult(answer=answer.strip(), sources=sources, matches=matches)
+        return RAGResult(answer=answer, sources=sources, matches=matches)
 
     def stream_answer(
         self,
@@ -283,6 +305,7 @@ class RAGPipeline:
         question: str,
         agent_system_prompt: str = "",
     ):
+        """Teljes válasz (polish után), majd streaming a UI-nak."""
         matches = self.retrieve(agent_id=agent_id, question=question)
         if not matches:
             yield no_info_reply(question)
@@ -295,7 +318,28 @@ class RAGPipeline:
             has_context=True,
         )
         settings = get_settings()
-        yield from self._llm().stream(messages, temperature=settings.llm_temperature)
+        draft = self._llm().generate(messages, temperature=settings.llm_temperature)
+        answer = self._finalize_answer(question=question, draft=draft)
+        # Chunkolt kiadás — a widget streamet vár
+        step = 48
+        for i in range(0, len(answer), step):
+            yield answer[i : i + step]
+
+    def generate_answer(
+        self,
+        *,
+        agent_id: str,
+        question: str,
+        agent_system_prompt: str = "",
+        include_sources: bool = True,
+    ) -> RAGResult:
+        """Retrieve + generate + polish (stream nélküli teljes válasz)."""
+        return self.answer(
+            agent_id=agent_id,
+            question=question,
+            agent_system_prompt=agent_system_prompt,
+            include_sources=include_sources,
+        )
 
     def _sources(self, matches: list[VectorMatch]) -> list[ChatSource]:
         unique: dict[tuple, ChatSource] = {}

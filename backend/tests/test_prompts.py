@@ -31,8 +31,10 @@ def test_build_messages_requires_detail_for_simple_questions_too():
         agent_system_prompt="",
         has_context=True,
     )
-    assert "MUST answer in detail for this question (and for every question)" in messages[1]["content"]
+    assert "MUST answer in detail for this question" in messages[1]["content"]
     assert "Even simple factual questions get a rich answer" in GLOBAL_RAG_SYSTEM
+    assert "English only" in messages[1]["content"]
+    assert "dedicated translator" in messages[1]["content"]
 
 
 def test_format_document_inventory_lists_every_file():

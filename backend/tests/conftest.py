@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 
 os.environ.setdefault("APP_ENV", "test")
 os.environ.setdefault("LLM_SKIP_CHECK", "true")
+os.environ.setdefault("LLM_POLISH_ENABLED", "false")
 os.environ.setdefault("ADMIN_USERNAME", "ai")
 os.environ.setdefault("ADMIN_PASSWORD", "No_comment_123")
 os.environ.setdefault("SECRET_KEY", "test-secret-key-not-for-production")
@@ -43,6 +44,22 @@ class ExtractiveLLM:
         from app.rag.prompts import no_info_reply
 
         user = messages[-1]["content"]
+        # Nyelvi fordító pass: add vissza a draftot változtatás nélkül
+        if "English draft" in user or "Draft answer to rewrite" in user:
+            if "English draft:" in user:
+                draft = user.split("English draft:")[-1]
+            elif "English draft to translate into correct Hungarian:" in user:
+                draft = user.split("English draft to translate into correct Hungarian:")[-1]
+            else:
+                draft = user.split("Draft answer to rewrite into correct Hungarian:")[-1]
+            for stopper in (
+                "Translate into correct Hungarian.",
+                "Translate now.",
+                "Rewrite now.",
+            ):
+                draft = draft.split(stopper)[0]
+            draft = draft.strip()
+            return draft or "Javított válasz."
         question = user.split("User question:")[-1]
         question = question.split("Answer only")[0].strip()
         if "No document excerpts were retrieved" in user:
