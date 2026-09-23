@@ -38,6 +38,7 @@ storage/models/**
 Thumbs.db
 .vscode/
 .idea/
+.cursor/
 
 # Test artifacts
 backend/.tmp/
