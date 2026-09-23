@@ -11,6 +11,24 @@ def test_collapse_repetition_cuts_runaway_phrase():
     assert cleaned.startswith("A Fallout világában:")
 
 
+def test_collapse_repetition_cuts_multiline_dark_souls_loop():
+    block = (
+        "A Dark Souls tárhelyes játék tartalmaz:\n"
+        "1. **Karakterkészítés** - különböző képességeket, tulajdonságokat és találkozási lehetőséget.\n"
+        "2. **Adventúra**: A hősök közös céllal harcolnak a világban.\n"
+    )
+    prefix = (
+        "A Dark Souls világában a hősök Undead-ek. "
+        "A tárhelyes játékban karaktereket készítenek.\n\n"
+    )
+    text = prefix + block * 25
+    cleaned, cut = collapse_repetition(text, max_consecutive=1)
+    assert cut
+    assert cleaned.count("A Dark Souls tárhelyes játék tartalmaz:") <= 2
+    assert "Undead" in cleaned or "karaktereket" in cleaned
+    assert len(cleaned) < len(text) // 5
+
+
 def test_collapse_repetition_keeps_normal_prose():
     text = (
         "A Fallout világ post-apokaliptikus. "
@@ -41,3 +59,17 @@ def test_stream_guard_stops_on_loop():
     full = "".join(emitted)
     final = guard.finalize(full + unit * 5)
     assert final.count("vitelkocka") <= 4
+
+
+def test_stream_guard_stops_on_multiline_loop():
+    guard = StreamRepetitionGuard(check_every=8, min_buffer=30)
+    block = (
+        "A Dark Souls tárhelyes játék tartalmaz:\n"
+        "1. **Karakterkészítés** - különböző képességeket.\n"
+        "2. **Adventúra**: A hősök harcolnak.\n"
+    )
+    for _ in range(8):
+        guard.push(block)
+        if guard.triggered:
+            break
+    assert guard.triggered

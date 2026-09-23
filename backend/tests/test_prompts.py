@@ -1,4 +1,9 @@
-from app.rag.prompts import GLOBAL_RAG_SYSTEM, build_messages, format_document_inventory
+from app.rag.prompts import (
+    GLOBAL_RAG_SYSTEM,
+    build_messages,
+    format_document_inventory,
+    format_knowledge_catalog,
+)
 
 
 def test_build_messages_asks_for_detailed_structured_answers():
@@ -45,6 +50,25 @@ def test_format_document_inventory_lists_every_file():
         assert "3" in text
     assert "teljes lista" in hu.lower()
     assert "complete catalog" in en.lower()
+
+
+def test_format_knowledge_catalog_groups_worlds():
+    docs = [
+        ("1", "Fallout Core Rulebook Digital Release - February 2023.pdf", 10),
+        ("2", "Cyberpunk Red.pdf", 20),
+        ("3", "Legend Of The Five Rings 4e - Core Rules.pdf", 30),
+        ("4", "Legend Of The Five Rings 4e - Emerald Empire.pdf", 40),
+        ("5", "blade-runner-rpg-core-rules.pdf", 15),
+    ]
+    text = format_knowledge_catalog("milyen szerepjátékos világokat ismersz?", docs)
+    assert "Fallout" in text
+    assert "Cyberpunk" in text
+    assert "Legend of the Five Rings" in text
+    assert "Blade Runner" in text
+    assert "4" in text or "5" in text  # 4 világ (L5R összevonva)
+    assert text.lower().count("legend of the five rings") >= 1
+    assert "Emerald Empire" in text  # forrás fájlnévként
+    assert "mit tudsz a fallout" not in text.lower()
 
 
 def test_build_messages_no_context_uses_insufficient_rule():

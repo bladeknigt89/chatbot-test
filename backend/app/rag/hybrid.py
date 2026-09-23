@@ -47,6 +47,49 @@ _DOC_INVENTORY_INTENT = re.compile(
     re.IGNORECASE,
 )
 
+# „Milyen világokat/rendszereket ismersz?” — teljes tudáskatalógus a fájlnevekből
+_KNOWLEDGE_CATALOG = re.compile(
+    r"("
+    r"milyen\s+[\wáéíóöőúüű/\- ]{0,60}?"
+    r"(vilag|rendszer|szerepjatek|jatek|setting|world|system|franchise|rpg|ttrpg|game)s?\b"
+    r"|"
+    r"what\s+[\w/\- ]{0,60}?(worlds?|systems?|settings?|games?|rpgs?|franchises?)\b"
+    r"|"
+    r"(vilagok(at|rol)?|rendszerek(et|rol)?|szerepjatekok(at|rol)?|"
+    r"jatekokat|settings?|worlds?|systems?|rpgs?)"
+    r".{0,40}(ismer|tud|van|list|have|know|available|felsorol|sorol)"
+    r"|"
+    r"(ismer|tud|list|felsorol|sorol|have|know).{0,40}"
+    r"(vilag|rendszer|szerepjatek|jatek|setting|world|system|rpg|franchise)"
+    r")",
+    re.IGNORECASE,
+)
+
+# Zaj a fájlnév → világ/rendszer címkéből
+_FILENAME_NOISE = re.compile(
+    r"("
+    r"\b(core|rulebook|rules?|digital|release|edition|anniversary|quickstart|guide|"
+    r"handbook|codex|manual|sourcebook|players?\s*guide|gm\s*guide|"
+    r"rpg|ttrpg|roleplaying|role\s*playing(\s*game)?|trpg|"
+    r"february|january|march|april|may|june|july|august|september|october|november|december|"
+    r"vol\.?|volume|book|pdf)\b"
+    r"|\b\d{1,2}e\b|\bv?\d+(?:\.\d+)+\b|\b20\d{2}\b"
+    r")",
+    re.IGNORECASE,
+)
+
+_SERIES_NORMALIZE: tuple[tuple[re.Pattern[str], str], ...] = (
+    (re.compile(r"legend\s+of\s+the\s+five\s+rings|\bl5r\b", re.I), "Legend of the Five Rings"),
+    (re.compile(r"\bfallout\b", re.I), "Fallout"),
+    (re.compile(r"\bcyberpunk\b", re.I), "Cyberpunk"),
+    (re.compile(r"\bblade\s*runner\b", re.I), "Blade Runner"),
+    (re.compile(r"\bavatar\s*legends?\b", re.I), "Avatar Legends"),
+    (re.compile(r"\bdragon\s*age\b|\bdragonage\b", re.I), "Dragon Age"),
+    (re.compile(r"\bdeadlands\b", re.I), "Deadlands"),
+    (re.compile(r"\bdark\s*souls\b", re.I), "Dark Souls"),
+    (re.compile(r"\bbreak!!|\bbreak\b.*\bttrpg\b", re.I), "BREAK!!"),
+)
+
 # Gyakori kérdés-szavak, amelyek nem témakijelölők a fájlnév-együttálláshoz
 _TOPIC_STOP = {
     "mit",
@@ -112,6 +155,77 @@ def is_document_inventory_question(question: str) -> bool:
             re.IGNORECASE,
         )
     )
+
+
+def is_knowledge_catalog_question(question: str) -> bool:
+    """
+    „Milyen szerepjátékos világokat/rendszereket ismersz?”
+    — a teljes tudáskatalógus kell, nem top-K RAG.
+    Nem aktiválódik specifikus témára (pl. „mit tudsz a Fallout világáról?”).
+    """
+    folded = fold_accents(question)
+    if is_document_inventory_question(question):
+        return False
+    if not _KNOWLEDGE_CATALOG.search(folded):
+        return False
+    # Specifikus cím: „a Fallout világáról”, „about Cyberpunk Red”
+    if re.search(
+        r"\b(a|az|the|about)\s+[a-záéíóöőúüű0-9][\wáéíóöőúüű\- ]{1,40}"
+        r"(vilag(a|arol|aban)?|world|setting|system|rendszer(e|rol|eben)?)\b",
+        folded,
+        re.IGNORECASE,
+    ):
+        return False
+    return True
+
+
+def knowledge_label_from_filename(filename: str) -> str:
+    """Fájlnév → olvasható világ/rendszer címke (deduplikáláshoz)."""
+    raw = (filename or "").rsplit(".", 1)[0]
+    raw = raw.replace("_", " ").replace("-", " ")
+    raw = re.sub(r"\s+", " ", raw).strip()
+    folded = fold_accents(raw)
+    for pattern, label in _SERIES_NORMALIZE:
+        if pattern.search(folded) or pattern.search(raw):
+            return label
+    # „Title – Subtitle” → Title
+    if " – " in raw:
+        raw = raw.split(" – ", 1)[0].strip()
+    elif " - " in raw:
+        left, right = raw.split(" - ", 1)
+        # Ha a bal oldal rövid címnek tűnik, azt tartjuk
+        if 2 <= len(left.split()) <= 6:
+            raw = left.strip()
+    cleaned = _FILENAME_NOISE.sub(" ", raw)
+    cleaned = re.sub(r"[\[\](){}]", " ", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip(" -_|")
+    if not cleaned:
+        cleaned = re.sub(r"\s+", " ", raw).strip()
+    # Title Case a megjelenítéshez
+    if cleaned.isupper() or cleaned.islower() or "_" in filename:
+        cleaned = cleaned.title()
+    return cleaned or filename
+
+
+def group_documents_by_knowledge_label(
+    documents: list[tuple[str, str, int]],
+) -> list[tuple[str, list[tuple[str, str, int]]]]:
+    """
+    (label, [(doc_id, filename, chunks), ...]) — címke szerint csoportosítva.
+    """
+    buckets: dict[str, list[tuple[str, str, int]]] = {}
+    order: list[str] = []
+    key_for: dict[str, str] = {}
+    for item in documents:
+        _doc_id, name, _chunks = item
+        label = knowledge_label_from_filename(name)
+        key = fold_accents(label).lower()
+        if key not in key_for:
+            key_for[key] = label
+            order.append(key)
+            buckets[key] = []
+        buckets[key].append(item)
+    return [(key_for[k], buckets[k]) for k in order]
 
 
 def query_topic_terms(question: str) -> list[str]:

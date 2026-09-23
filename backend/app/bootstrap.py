@@ -23,6 +23,7 @@ def ensure_directories(settings: Settings | None = None) -> None:
 def create_schema() -> None:
     Base.metadata.create_all(bind=get_engine())
     _ensure_document_progress_column()
+    _ensure_agent_show_sources_column()
 
 
 def _ensure_document_progress_column() -> None:
@@ -35,6 +36,19 @@ def _ensure_document_progress_column() -> None:
             conn.execute(
                 sa_text(
                     "ALTER TABLE documents ADD COLUMN progress_percent INTEGER NOT NULL DEFAULT 0"
+                )
+            )
+
+
+def _ensure_agent_show_sources_column() -> None:
+    engine = get_engine()
+    with engine.begin() as conn:
+        rows = conn.execute(sa_text("PRAGMA table_info(agents)")).fetchall()
+        columns = {row[1] for row in rows}
+        if "show_sources" not in columns:
+            conn.execute(
+                sa_text(
+                    "ALTER TABLE agents ADD COLUMN show_sources BOOLEAN NOT NULL DEFAULT 1"
                 )
             )
 

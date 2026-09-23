@@ -26,4 +26,5 @@ def widget_config(agent_id: str, db: Session = Depends(get_db)):
         title=title,
         position=agent.widget_position,
         welcome_message=agent.widget_welcome_message,
+        show_sources=bool(agent.show_sources),
     )

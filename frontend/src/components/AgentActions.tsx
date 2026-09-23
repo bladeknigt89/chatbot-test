@@ -80,6 +80,7 @@ export default function AgentActions({ agent, onUpdated, compact }: Props) {
         description: draft.description,
         system_prompt: draft.system_prompt,
         status: draft.status,
+        show_sources: draft.show_sources,
         widget_primary_color: draft.widget_primary_color,
         widget_title: draft.widget_title,
         widget_position: draft.widget_position,
@@ -189,6 +190,14 @@ export default function AgentActions({ agent, onUpdated, compact }: Props) {
                   onChange={(e) => setDraft({ ...draft, system_prompt: e.target.value })}
                   placeholder="Opcionális agent-specifikus utasítások…"
                 />
+              </label>
+              <label className="checkbox-row">
+                <input
+                  type="checkbox"
+                  checked={draft.show_sources !== false}
+                  onChange={(e) => setDraft({ ...draft, show_sources: e.target.checked })}
+                />
+                <span>Forrásfájlok megjelenítése a válaszban</span>
               </label>
               <label>
                 Státusz

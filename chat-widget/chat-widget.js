@@ -37,7 +37,8 @@
       primaryColor: userConfig.primaryColor || "#2563eb",
       title: userConfig.title || "Chat",
       position: userConfig.position || "right",
-      welcomeMessage: userConfig.welcomeMessage || "Üdvözlöm! Miben segíthetek?"
+      welcomeMessage: userConfig.welcomeMessage || "Üdvözlöm! Miben segíthetek?",
+      showSources: userConfig.showSources !== false
     }
   };
 
@@ -194,7 +195,7 @@
         message: text,
         session_id: state.sessionId,
         stream: true,
-        include_sources: true
+        include_sources: state.config.showSources !== false
       })
     })
       .then(function (response) {
@@ -288,6 +289,11 @@
         state.config.position = userConfig.position || cfg.position || "right";
         state.config.welcomeMessage =
           userConfig.welcomeMessage || cfg.welcome_message || state.config.welcomeMessage;
+        if (typeof userConfig.showSources === "boolean") {
+          state.config.showSources = userConfig.showSources;
+        } else if (typeof cfg.show_sources === "boolean") {
+          state.config.showSources = cfg.show_sources;
+        }
         state.messages = [{ role: "bot", text: state.config.welcomeMessage, sources: [] }];
         render();
       })

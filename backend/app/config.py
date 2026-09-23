@@ -26,10 +26,10 @@ class Settings(BaseSettings):
     llm_provider: str = "ollama"
     llm_base_url: str = "http://127.0.0.1:11434"
     llm_model: str = "qwen2.5:7b"
-    llm_temperature: float = 0.1
-    llm_num_predict: int = 4096
-    llm_repeat_penalty: float = 1.25
-    llm_top_p: float = 0.9
+    llm_temperature: float = 0.15
+    llm_num_predict: int = 2048
+    llm_repeat_penalty: float = 1.4
+    llm_top_p: float = 0.85
     llm_skip_check: bool = False
 
     embedding_provider: str = "ollama"

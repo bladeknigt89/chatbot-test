@@ -101,12 +101,40 @@ button, input, textarea, select { font: inherit; }
 
 .form { display: grid; gap: 12px; }
 label { display: grid; gap: 6px; font-size: 14px; color: var(--muted); }
+label.checkbox-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--ink);
+  cursor: pointer;
+}
+label.checkbox-row input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  padding: 0;
+  border-radius: 4px;
+  accent-color: var(--accent, #c45c26);
+  flex: 0 0 auto;
+}
 input, textarea, select {
   border: 1px solid var(--line);
   background: #fff;
   border-radius: 12px;
   padding: 10px 12px;
   color: var(--ink);
+}
+input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border-radius: 4px;
+  accent-color: var(--accent, #c45c26);
 }
 .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 .badge { display: inline-flex; align-items: center; padding: 4px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; }

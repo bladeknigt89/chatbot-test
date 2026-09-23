@@ -86,6 +86,40 @@ def test_document_inventory_lists_all_ready_docs(admin_client: TestClient):
     assert names == {"Alpha Handbook.pdf", "Beta Codex.pdf", "Gamma Rules.pdf"}
 
 
+def test_knowledge_catalog_lists_worlds_from_filenames(admin_client: TestClient):
+    agent = admin_client.post("/api/agents", json={"name": "RPGs"}).json()
+    for name, text in [
+        ("Fallout Core Rulebook.pdf", "Vault-Tec wasteland FALL_MARKER."),
+        ("Cyberpunk Red.pdf", "Night City CYBER_MARKER."),
+        ("Legend Of The Five Rings 4e - Core Rules.pdf", "Emerald Empire L5R_MARKER."),
+        ("Legend Of The Five Rings 4e - The Great Clans.pdf", "Clans overview L5R2_MARKER."),
+    ]:
+        admin_client.post(
+            f"/api/agents/{agent['id']}/documents",
+            files={"file": (name, make_pdf(text), "application/pdf")},
+        )
+    drain_jobs()
+    response = admin_client.post(
+        f"/api/chat/{agent['id']}",
+        json={
+            "message": "milyen szerepjátékos világokat/rendszereket ismersz?",
+            "stream": False,
+        },
+    )
+    assert response.status_code == 200, response.text
+    message = response.json()["message"]
+    assert "Fallout" in message
+    assert "Cyberpunk" in message
+    assert "Legend of the Five Rings" in message
+    # Specifikus kérdés ne a katalógust adja
+    detail = admin_client.post(
+        f"/api/chat/{agent['id']}",
+        json={"message": "mit tudsz a fallout világáról?", "stream": False},
+    )
+    assert detail.status_code == 200
+    assert "szerepjátékos világokat" not in detail.json()["message"].lower()
+
+
 def test_hungarian_questions(admin_client: TestClient):
     agent = admin_client.post("/api/agents", json={"name": "HU"}).json()
     admin_client.post(
@@ -126,3 +160,20 @@ def test_hungarian_questions(admin_client: TestClient):
                 "szerzodes",
             )
         )
+
+
+def test_agent_show_sources_toggle_hides_citations(admin_client: TestClient):
+    agent = admin_client.post("/api/agents", json={"name": "NoSrc", "show_sources": False}).json()
+    assert agent["show_sources"] is False
+    admin_client.post(
+        f"/api/agents/{agent['id']}/documents",
+        files={"file": ("munkaszabalyzat.pdf", make_pdf(HR_DOC), "application/pdf")},
+    )
+    drain_jobs()
+    response = admin_client.post(
+        f"/api/chat/{agent['id']}",
+        json={"message": "Mi a vállalat neve?", "stream": False, "include_sources": True},
+    )
+    assert response.status_code == 200
+    assert "Example Kft" in response.json()["message"]
+    assert response.json()["sources"] == []

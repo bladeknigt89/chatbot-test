@@ -29,6 +29,7 @@ class AgentCreate(BaseModel):
     description: str = ""
     system_prompt: str = ""
     status: Literal["active", "inactive"] = "active"
+    show_sources: bool = True
     widget_primary_color: str = "#2563eb"
     widget_title: str = ""
     widget_position: Literal["right", "left"] = "right"
@@ -40,6 +41,7 @@ class AgentUpdate(BaseModel):
     description: str | None = None
     system_prompt: str | None = None
     status: Literal["active", "inactive"] | None = None
+    show_sources: bool | None = None
     widget_primary_color: str | None = None
     widget_title: str | None = None
     widget_position: Literal["right", "left"] | None = None
@@ -52,6 +54,7 @@ class AgentOut(ORMModel):
     description: str
     system_prompt: str
     status: str
+    show_sources: bool = True
     widget_primary_color: str
     widget_title: str
     widget_position: str
@@ -164,6 +167,7 @@ class WidgetConfigOut(BaseModel):
     title: str
     position: str
     welcome_message: str
+    show_sources: bool = True
 
 
 class ErrorOut(BaseModel):

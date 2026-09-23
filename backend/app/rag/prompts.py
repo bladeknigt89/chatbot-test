@@ -23,8 +23,9 @@ Answer style for EVERY question (mandatory when excerpts exist):
 - Explain how things work, not only what they are called or which book they appear in.
 - Cover the relevant excerpts once: if several passages apply, weave them into one coherent detailed answer.
 - For lists: enumerate each distinct matching item found in the excerpts; do not stop after one or two examples.
-- Never repeat the same phrase, bullet, clause, or list item. If you have no new distinct content, stop immediately.
+- Never repeat the same phrase, bullet, clause, section, or list item. If you have no new distinct content, stop immediately.
 - Do not pad, loop, or restate the same wording with tiny variations.
+- Do not rewrite the same numbered list or section headers multiple times.
 - For rules, mechanics, procedures, or any “how does X work / write the rules / explain” request:
   - Write a structured summary of all related rules found in the excerpts.
   - Keep numbers and named terms exact; paraphrase the rest clearly.
@@ -123,4 +124,50 @@ def format_document_inventory(
         lines.append(f"{index}. {name} ({chunks} chunks)")
     lines.append("")
     lines.append("This is the complete catalog — every READY uploaded file is included.")
+    return "\n".join(lines)
+
+
+def format_knowledge_catalog(
+    question: str,
+    documents: list[tuple[str, str, int]],
+) -> str:
+    """Világok/rendszerek listája a dokumentumnevek alapján (teljes katalógus)."""
+    from app.rag.hybrid import group_documents_by_knowledge_label
+
+    hungarian = looks_hungarian(question)
+    if not documents:
+        if hungarian:
+            return "Az agent tudásbázisában jelenleg nincs feldolgozott dokumentum, így világokat/rendszereket sem tudok felsorolni."
+        return "This agent has no processed documents, so I cannot list any worlds or systems."
+
+    groups = group_documents_by_knowledge_label(documents)
+    if hungarian:
+        lines = [
+            f"A feltöltött dokumentumok alapján ezeket a szerepjátékos világokat/rendszereket ismerem ({len(groups)}):",
+            "",
+        ]
+        for index, (label, docs) in enumerate(groups, start=1):
+            doc_names = ", ".join(name for _id, name, _c in docs)
+            if len(docs) == 1:
+                lines.append(f"{index}. {label}")
+            else:
+                lines.append(f"{index}. {label} ({len(docs)} dokumentum)")
+            lines.append(f"   Forrás: {doc_names}")
+        lines.append("")
+        lines.append("Ez a teljes lista a READY dokumentumok fájlnevei alapján — minden fellelhető világ/rendszer szerepel.")
+        return "\n".join(lines)
+
+    lines = [
+        f"Based on the uploaded documents, I know these RPG worlds/systems ({len(groups)}):",
+        "",
+    ]
+    for index, (label, docs) in enumerate(groups, start=1):
+        doc_names = ", ".join(name for _id, name, _c in docs)
+        if len(docs) == 1:
+            lines.append(f"{index}. {label}")
+        else:
+            lines.append(f"{index}. {label} ({len(docs)} documents)")
+        lines.append(f"   Source: {doc_names}")
+    lines.append("")
+    lines.append("This is the complete catalog derived from READY document filenames.")
     return "\n".join(lines)

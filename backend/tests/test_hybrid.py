@@ -140,6 +140,26 @@ def test_is_document_inventory_question():
     assert not is_document_inventory_question("write me the detailed rules of legend of the five rings")
 
 
+def test_is_knowledge_catalog_question():
+    from app.rag.hybrid import is_knowledge_catalog_question, knowledge_label_from_filename
+
+    assert is_knowledge_catalog_question("milyen szerepjátékos világokat/rendszereket ismersz?")
+    assert is_knowledge_catalog_question("What RPG worlds and systems do you know?")
+    assert is_knowledge_catalog_question("Sorold fel a világokat")
+    assert not is_knowledge_catalog_question("mit tudsz a fallout világáról?")
+    assert not is_knowledge_catalog_question("Mi a próbaidő a munkaszabályzatban?")
+    assert not is_knowledge_catalog_question("milyen dokumentumai vannak?")
+
+    assert knowledge_label_from_filename("Fallout Core Rulebook Digital Release - February 2023.pdf") == "Fallout"
+    assert knowledge_label_from_filename("Cyberpunk Red.pdf") == "Cyberpunk"
+    assert (
+        knowledge_label_from_filename("Legend Of The Five Rings 4e - Core Rules.pdf")
+        == "Legend of the Five Rings"
+    )
+    assert knowledge_label_from_filename("blade-runner-rpg-core-rules.pdf") == "Blade Runner"
+    assert knowledge_label_from_filename("Dragonage Core Rulebook.pdf") == "Dragon Age"
+
+
 def test_document_name_boost_prefers_core_rules():
     question = "write me the detailed rules of legend of the five rings"
     core = document_name_boost(question, "Legend Of The Five Rings 4e - Core Rules.pdf")

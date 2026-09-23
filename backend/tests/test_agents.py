@@ -8,14 +8,22 @@ def test_agent_crud(admin_client: TestClient):
     )
     assert created.status_code == 201
     agent_id = created.json()["id"]
+    assert created.json()["show_sources"] is True
     listed = admin_client.get("/api/agents")
     assert listed.status_code == 200
     assert any(item["id"] == agent_id for item in listed.json())
     fetched = admin_client.get(f"/api/agents/{agent_id}")
     assert fetched.json()["name"] == "HR Agent"
-    updated = admin_client.put(f"/api/agents/{agent_id}", json={"status": "inactive", "name": "HR"})
+    updated = admin_client.put(
+        f"/api/agents/{agent_id}",
+        json={"status": "inactive", "name": "HR", "show_sources": False},
+    )
     assert updated.json()["status"] == "inactive"
     assert updated.json()["name"] == "HR"
+    assert updated.json()["show_sources"] is False
+    widget = admin_client.get(f"/api/widget/{agent_id}/config")
+    assert widget.status_code == 200
+    assert widget.json()["show_sources"] is False
     deleted = admin_client.delete(f"/api/agents/{agent_id}")
     assert deleted.status_code == 202
 

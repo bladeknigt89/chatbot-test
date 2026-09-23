@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from sqlalchemy import (
+    Boolean,
     DateTime,
     ForeignKey,
     Integer,
@@ -42,6 +43,7 @@ class Agent(Base):
     description: Mapped[str] = mapped_column(Text, default="", nullable=False)
     system_prompt: Mapped[str] = mapped_column(Text, default="", nullable=False)
     status: Mapped[str] = mapped_column(String(20), default="active", nullable=False, index=True)
+    show_sources: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     widget_primary_color: Mapped[str] = mapped_column(String(20), default="#2563eb")
     widget_title: Mapped[str] = mapped_column(String(200), default="")
     widget_position: Mapped[str] = mapped_column(String(20), default="right")

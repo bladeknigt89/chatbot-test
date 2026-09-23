@@ -98,6 +98,14 @@ export default function AgentDetail() {
               onChange={(e) => setAgent({ ...agent, system_prompt: e.target.value })}
             />
           </label>
+          <label className="checkbox-row">
+            <input
+              type="checkbox"
+              checked={agent.show_sources !== false}
+              onChange={(e) => setAgent({ ...agent, show_sources: e.target.checked })}
+            />
+            <span>Forrásfájlok megjelenítése a válaszban</span>
+          </label>
           <h3>Chat tulajdonságok</h3>
           <label>
             Widget szín

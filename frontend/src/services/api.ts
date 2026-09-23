@@ -4,6 +4,7 @@ export type Agent = {
   description: string;
   system_prompt: string;
   status: string;
+  show_sources: boolean;
   widget_primary_color: string;
   widget_title: string;
   widget_position: string;
