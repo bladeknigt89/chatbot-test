@@ -44,6 +44,12 @@ Thumbs.db
 backend/.tmp/
 tmp/
 
+# Tests (ne kerüljenek a remote-ra)
+backend/tests/
+frontend/**/*.test.ts
+frontend/**/*.test.tsx
+frontend/vitest.config.ts
+
 *.db-shm
 *.db-wal
 storage/runtime.pids

@@ -209,6 +209,9 @@ def _friendly_error(exc: Exception) -> str:
 def _delete_document(db: Session, document_id: str, agent_id: str, stored_filename: str | None) -> None:
     store = get_vector_store()
     store.delete_document(agent_id, document_id)
+    from app.rag.memory import get_retrieval_memory
+
+    get_retrieval_memory().delete_document(agent_id, document_id)
     if stored_filename:
         try:
             delete_file(agent_id, stored_filename)
@@ -223,6 +226,9 @@ def _delete_document(db: Session, document_id: str, agent_id: str, stored_filena
 def _delete_agent(db: Session, agent_id: str) -> None:
     store = get_vector_store()
     store.delete_agent(agent_id)
+    from app.rag.memory import get_retrieval_memory
+
+    get_retrieval_memory().delete_agent(agent_id)
     documents = db.query(Document).filter(Document.agent_id == agent_id).all()
     for document in documents:
         try:

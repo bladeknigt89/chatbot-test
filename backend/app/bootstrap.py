@@ -24,6 +24,7 @@ def create_schema() -> None:
     Base.metadata.create_all(bind=get_engine())
     _ensure_document_progress_column()
     _ensure_agent_show_sources_column()
+    _ensure_agent_knowledge_profile_column()
 
 
 def _ensure_document_progress_column() -> None:
@@ -49,6 +50,20 @@ def _ensure_agent_show_sources_column() -> None:
             conn.execute(
                 sa_text(
                     "ALTER TABLE agents ADD COLUMN show_sources BOOLEAN NOT NULL DEFAULT 1"
+                )
+            )
+
+
+def _ensure_agent_knowledge_profile_column() -> None:
+    engine = get_engine()
+    with engine.begin() as conn:
+        rows = conn.execute(sa_text("PRAGMA table_info(agents)")).fetchall()
+        columns = {row[1] for row in rows}
+        if "knowledge_profile" not in columns:
+            conn.execute(
+                sa_text(
+                    "ALTER TABLE agents ADD COLUMN knowledge_profile "
+                    "VARCHAR(20) NOT NULL DEFAULT 'auto'"
                 )
             )
 

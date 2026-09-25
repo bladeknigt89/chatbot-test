@@ -44,6 +44,9 @@ class Agent(Base):
     system_prompt: Mapped[str] = mapped_column(Text, default="", nullable=False)
     status: Mapped[str] = mapped_column(String(20), default="active", nullable=False, index=True)
     show_sources: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    knowledge_profile: Mapped[str] = mapped_column(
+        String(20), default="auto", nullable=False
+    )
     widget_primary_color: Mapped[str] = mapped_column(String(20), default="#2563eb")
     widget_title: Mapped[str] = mapped_column(String(200), default="")
     widget_position: Mapped[str] = mapped_column(String(20), default="right")

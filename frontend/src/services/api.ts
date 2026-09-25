@@ -5,6 +5,7 @@ export type Agent = {
   system_prompt: string;
   status: string;
   show_sources: boolean;
+  knowledge_profile?: "auto" | "general" | "rpg";
   widget_primary_color: string;
   widget_title: string;
   widget_position: string;

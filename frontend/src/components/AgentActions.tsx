@@ -81,6 +81,7 @@ export default function AgentActions({ agent, onUpdated, compact }: Props) {
         system_prompt: draft.system_prompt,
         status: draft.status,
         show_sources: draft.show_sources,
+        knowledge_profile: draft.knowledge_profile || "auto",
         widget_primary_color: draft.widget_primary_color,
         widget_title: draft.widget_title,
         widget_position: draft.widget_position,
@@ -198,6 +199,22 @@ export default function AgentActions({ agent, onUpdated, compact }: Props) {
                   onChange={(e) => setDraft({ ...draft, show_sources: e.target.checked })}
                 />
                 <span>Forrásfájlok megjelenítése a válaszban</span>
+              </label>
+              <label>
+                Tudásprofil
+                <select
+                  value={draft.knowledge_profile || "auto"}
+                  onChange={(e) =>
+                    setDraft({
+                      ...draft,
+                      knowledge_profile: e.target.value as Agent["knowledge_profile"],
+                    })
+                  }
+                >
+                  <option value="auto">auto (dokumentumokból)</option>
+                  <option value="general">általános / egyetem / support</option>
+                  <option value="rpg">szerepjáték / világkatalógus</option>
+                </select>
               </label>
               <label>
                 Státusz

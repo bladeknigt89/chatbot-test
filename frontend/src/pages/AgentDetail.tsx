@@ -106,6 +106,22 @@ export default function AgentDetail() {
             />
             <span>Forrásfájlok megjelenítése a válaszban</span>
           </label>
+          <label>
+            Tudásprofil
+            <select
+              value={agent.knowledge_profile || "auto"}
+              onChange={(e) =>
+                setAgent({
+                  ...agent,
+                  knowledge_profile: e.target.value as Agent["knowledge_profile"],
+                })
+              }
+            >
+              <option value="auto">auto (dokumentumokból)</option>
+              <option value="general">általános / egyetem / support</option>
+              <option value="rpg">szerepjáték / világkatalógus</option>
+            </select>
+          </label>
           <h3>Chat tulajdonságok</h3>
           <label>
             Widget szín

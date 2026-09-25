@@ -16,6 +16,7 @@ from app.llm.factory import get_llm_provider, get_polish_llm_provider
 from app.models import Agent, ChatMessage, ChatSession, Document
 from app.rag.pipeline import RAGPipeline
 from app.rag.hybrid import is_document_inventory_question, is_knowledge_catalog_question
+from app.rag.profile import allows_knowledge_catalog, resolve_knowledge_profile
 from app.rag.prompts import format_document_inventory, format_knowledge_catalog, no_info_reply
 from app.rate_limit import limiter
 from app.schemas import ChatRequest, ChatResponse, ChatSource
@@ -209,6 +210,7 @@ def chat(
     # Skalárok a stream előtt — a request DB session a válasz előtt lezáródik.
     agent_pk = agent.id
     agent_prompt = agent.system_prompt or ""
+    agent_profile = getattr(agent, "knowledge_profile", None) or "auto"
     session_pk = session.id
     question = payload.message
     # Agent-szintű kapcsoló felülírja a kérés include_sources flagjét
@@ -236,7 +238,10 @@ def chat(
             stream=payload.stream,
         )
 
-    if is_knowledge_catalog_question(question):
+    # RPG világ/rendszer katalógus: csak rpg (vagy auto→rpg) profilú agentnél
+    ready_names = [doc.original_filename for doc in _ready_documents(db, agent_pk)]
+    effective_profile = resolve_knowledge_profile(agent_profile, document_names=ready_names)
+    if allows_knowledge_catalog(effective_profile) and is_knowledge_catalog_question(question):
         answer, sources = _knowledge_catalog_answer(
             db, agent_pk, question, include_sources=include_sources
         )
@@ -260,6 +265,7 @@ def chat(
                     question=question,
                     agent_system_prompt=agent_prompt,
                     include_sources=include_sources,
+                    knowledge_profile=agent_profile,
                 )
                 answer = result.answer
                 sources = result.sources
@@ -309,6 +315,7 @@ def chat(
         question=question,
         agent_system_prompt=agent_prompt,
         include_sources=include_sources,
+        knowledge_profile=agent_profile,
     )
     _maybe_store(
         db,

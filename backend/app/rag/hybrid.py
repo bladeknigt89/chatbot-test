@@ -48,19 +48,41 @@ _DOC_INVENTORY_INTENT = re.compile(
 )
 
 # „Milyen világokat/rendszereket ismersz?” — teljes tudáskatalógus a fájlnevekből
+# Figyelem: ne egyezzen support kérdésekkel („nem tudok bejelentkezni … rendszerbe”).
 _KNOWLEDGE_CATALOG = re.compile(
     r"("
     r"milyen\s+[\wáéíóöőúüű/\- ]{0,60}?"
-    r"(vilag|rendszer|szerepjatek|jatek|setting|world|system|franchise|rpg|ttrpg|game)s?\b"
+    r"(vilag|szerepjatek|setting|world|franchise|rpg|ttrpg)s?\b"
     r"|"
-    r"what\s+[\w/\- ]{0,60}?(worlds?|systems?|settings?|games?|rpgs?|franchises?)\b"
+    r"milyen\s+[\wáéíóöőúüű/\- ]{0,40}?"
+    r"(szerepjatek\w*|rpg|ttrpg)\w*\s+(rendszer|system|vilag|world|jatek|game)s?\b"
     r"|"
-    r"(vilagok(at|rol)?|rendszerek(et|rol)?|szerepjatekok(at|rol)?|"
-    r"jatekokat|settings?|worlds?|systems?|rpgs?)"
-    r".{0,40}(ismer|tud|van|list|have|know|available|felsorol|sorol)"
+    r"what\s+[\w/\- ]{0,60}?(worlds?|settings?|games?|rpgs?|franchises?)\b"
     r"|"
-    r"(ismer|tud|list|felsorol|sorol|have|know).{0,40}"
-    r"(vilag|rendszer|szerepjatek|jatek|setting|world|system|rpg|franchise)"
+    r"what\s+[\w/\- ]{0,40}?(rpg|ttrpg|tabletop)\w*\s+(systems?|worlds?|games?)\b"
+    r"|"
+    r"(vilagok(at|rol)?|szerepjatekok(at|rol)?|jatekokat|settings?|worlds?|rpgs?)"
+    r".{0,40}(ismersz|ismer|tudsz|list|have|know|available|felsorol|sorol)"
+    r"|"
+    r"(rendszerek(et|rol)?|systems?)"
+    r".{0,40}(ismersz|ismer|tudsz|list|have|know|available|felsorol|sorol|"
+    r"szerepjatek|rpg|ttrpg|vilag|world)"
+    r"|"
+    r"(ismersz|ismer|tudsz|listazd|felsorol|sorol|have|know).{0,40}"
+    r"(vilagok|szerepjatek|setting|worlds?|rpgs?|franchise|"
+    r"szerepjatek\w*\s+rendszer|rpg\s+system)"
+    r")",
+    re.IGNORECASE,
+)
+
+# IT/support kérdések — soha ne legyenek RPG-katalógus
+_SUPPORT_INTENT = re.compile(
+    r"("
+    r"bejelentkez|be\s*jelentkez|jelentkez\w*\s+be|"
+    r"e-?learning|moodle|neptun|coospace|canvas|"
+    r"jelszo|jelszó|elfelejt|nem\s+tudok|"
+    r"kihez\s+fordul|forduljak|helpdesk|ugyfelszolgal|ügyfélszolgál|"
+    r"hibajegy|support|cannot\s+log\s*in|can'?t\s+log\s*in|password\s+reset"
     r")",
     re.IGNORECASE,
 )
@@ -117,7 +139,7 @@ _TOPIC_STOP = {
     "reszletesen",
 }
 
-# Téma-bónusz: kérdés-tő → dokumentum-jelzők (általános, nem csak egy-egy szó).
+# Téma-bónusz: kérdés-tő → dokumentum-jelzők (általános / egyetem / support).
 _TOPIC_MARKERS: tuple[tuple[str, tuple[str, ...], float], ...] = (
     ("tortenet", ("tortenet", "jogelod", "alapit"), 0.4),
     ("alapit", ("alapit", "1998", "jogelod", "letrejott"), 0.25),
@@ -128,6 +150,28 @@ _TOPIC_MARKERS: tuple[tuple[str, tuple[str, ...], float], ...] = (
     ("kar", ("kar", "attekintes", "fakult"), 0.35),
     ("vezet", ("rektor", "dekán", "dekan", "kancellar"), 0.25),
     ("szabalyzat", ("szabalyzat", "rendelkezes"), 0.25),
+    ("bejelentkez", ("bejelentkez", "e-learning", "moodle", "jelszo", "helpdesk", "informatik"), 0.45),
+    ("elearning", ("e-learning", "elearning", "moodle", "coospace", "neptun"), 0.4),
+    ("jelszo", ("jelszo", "reset", "elfelejt", "bejelentkez"), 0.35),
+    ("helpdesk", ("helpdesk", "ugyfelszolgal", "informatik", "tamogat", "fordul"), 0.4),
+    ("fordul", ("helpdesk", "ugyfelszolgal", "informatik", "kapcsolat", "email"), 0.35),
+)
+
+_RPG_DETAIL_MARKERS = (
+    "roll",
+    "dice",
+    "skill",
+    "ring",
+    "tn ",
+    "raises",
+    "conflict",
+    "initiative",
+    "damage",
+    "trait",
+    "dobas",
+    "kocka",
+    "kepesseg",
+    "celertek",
 )
 
 
@@ -161,10 +205,13 @@ def is_knowledge_catalog_question(question: str) -> bool:
     """
     „Milyen szerepjátékos világokat/rendszereket ismersz?”
     — a teljes tudáskatalógus kell, nem top-K RAG.
-    Nem aktiválódik specifikus témára (pl. „mit tudsz a Fallout világáról?”).
+    Nem aktiválódik specifikus témára (pl. „mit tudsz a Fallout világáról?”),
+    és nem aktiválódik support/IT kérdésekre („nem tudok bejelentkezni … rendszerbe”).
     """
     folded = fold_accents(question)
     if is_document_inventory_question(question):
+        return False
+    if _SUPPORT_INTENT.search(folded):
         return False
     if not _KNOWLEDGE_CATALOG.search(folded):
         return False
@@ -296,7 +343,12 @@ def _token_hit(q_tok: str, text_tokens: set[str]) -> bool:
     return False
 
 
-def keyword_score(question: str, text: str) -> float:
+def keyword_score(
+    question: str,
+    text: str,
+    *,
+    knowledge_profile: str = "general",
+) -> float:
     q_tokens = tokenize(question)
     if not q_tokens:
         return 0.0
@@ -343,27 +395,9 @@ def keyword_score(question: str, text: str) -> float:
         elif numbered >= 2:
             score += 0.2
 
-    if is_detailed_question(question):
-        # Játékszabály / mechanika jelek
-        if any(
-            marker in text_fold
-            for marker in (
-                "roll",
-                "dice",
-                "skill",
-                "ring",
-                "tn ",
-                "raises",
-                "conflict",
-                "initiative",
-                "damage",
-                "trait",
-                "dobas",
-                "kocka",
-                "kepesseg",
-                "celertek",
-            )
-        ):
+    # RPG mechanika bónusz csak rpg profilú agentnél
+    if knowledge_profile == "rpg" and is_detailed_question(question):
+        if any(marker in text_fold for marker in _RPG_DETAIL_MARKERS):
             score += 0.2
 
     return min(score, 1.0)
@@ -375,13 +409,21 @@ def hybrid_rerank(
     *,
     top_k: int,
     keyword_weight: float = 0.55,
+    knowledge_profile: str = "general",
+    learned_doc_boosts: dict[str, float] | None = None,
 ) -> list[VectorMatch]:
     if not matches:
         return []
+    learned = learned_doc_boosts or {}
     ranked: list[VectorMatch] = []
     for match in matches:
-        kw = keyword_score(question, match.text)
-        doc_boost = document_name_boost(question, match.document_name)
+        kw = keyword_score(question, match.text, knowledge_profile=knowledge_profile)
+        if knowledge_profile == "rpg":
+            doc_boost = document_name_boost(question, match.document_name)
+        else:
+            # Ne alkalmazzuk az RPG rulebook/fájlnév-heuristikát általános agenteken
+            doc_boost = 0.55 * filename_topic_score(match.document_name, question)
+        doc_boost += learned.get(match.document_id, 0.0)
         combined = ((1.0 - keyword_weight) * float(match.score)) + (keyword_weight * kw) + doc_boost
         ranked.append(
             VectorMatch(
@@ -401,7 +443,7 @@ def hybrid_rerank(
     effective_k = max(top_k, min(len(ranked), 20))
     if is_list_question(question):
         effective_k = max(effective_k, min(len(ranked), top_k + 4, 24))
-    if is_detailed_question(question):
+    if knowledge_profile == "rpg" and is_detailed_question(question):
         effective_k = max(effective_k, min(len(ranked), max(top_k * 3, 28)))
     return ranked[:effective_k]
 
@@ -449,6 +491,7 @@ def rank_documents(
     question: str,
     *,
     document_catalog: list[tuple[str, str]] | None = None,
+    learned_doc_boosts: dict[str, float] | None = None,
 ) -> list[tuple[str, str, float]]:
     """
     Dokumentum-szintű routing score.
@@ -456,6 +499,7 @@ def rank_documents(
     """
     by_doc: dict[str, list[VectorMatch]] = defaultdict(list)
     names: dict[str, str] = {}
+    learned = learned_doc_boosts or {}
     for m in matches:
         by_doc[m.document_id].append(m)
         names[m.document_id] = m.document_name
@@ -469,15 +513,22 @@ def rank_documents(
     for doc_id, chunks in by_doc.items():
         name = names.get(doc_id, doc_id)
         fn = filename_topic_score(name, question)
+        learned_boost = learned.get(doc_id, 0.0)
         if chunks:
             top_scores = sorted((float(c.score) for c in chunks), reverse=True)[:5]
             avg_top = sum(top_scores) / len(top_scores)
             best = top_scores[0]
             coverage = min(1.0, len(chunks) / 8.0)
-            score = (0.45 * best) + (0.25 * avg_top) + (0.40 * fn) + (0.08 * coverage)
+            score = (
+                (0.45 * best)
+                + (0.25 * avg_top)
+                + (0.40 * fn)
+                + (0.08 * coverage)
+                + learned_boost
+            )
         else:
-            score = 0.65 * fn
-        if score > 0.02 or fn > 0:
+            score = 0.65 * fn + learned_boost
+        if score > 0.02 or fn > 0 or learned_boost > 0:
             ranked.append((doc_id, name, score))
 
     ranked.sort(key=lambda x: x[2], reverse=True)

@@ -101,7 +101,14 @@ class RAGPipeline:
                 on_progress(min(percent, 95), indexed, total)
         return indexed
 
-    def retrieve(self, *, agent_id: str, question: str, top_k: int | None = None) -> list[VectorMatch]:
+    def retrieve(
+        self,
+        *,
+        agent_id: str,
+        question: str,
+        top_k: int | None = None,
+        knowledge_profile: str = "auto",
+    ) -> list[VectorMatch]:
         from app.rag.hybrid import (
             diversify_by_document,
             hybrid_rerank,
@@ -110,6 +117,8 @@ class RAGPipeline:
             query_topic_terms,
             rank_documents,
         )
+        from app.rag.memory import get_retrieval_memory
+        from app.rag.profile import resolve_knowledge_profile
 
         settings = get_settings()
         k = top_k or settings.top_k
@@ -117,12 +126,20 @@ class RAGPipeline:
         k = max(k, 20)
         if is_list_question(question):
             k = max(k, 24)
-        if is_detailed_question(question):
-            k = max(k, 28)
 
         catalog = self.store.list_documents(agent_id)
         if not catalog:
             return []
+
+        profile = resolve_knowledge_profile(
+            knowledge_profile,
+            document_names=[name for _id, name in catalog],
+        )
+        if profile == "rpg" and is_detailed_question(question):
+            k = max(k, 28)
+
+        memory = get_retrieval_memory()
+        learned = memory.document_boosts(agent_id=agent_id, question=question)
 
         query_embedding = self.embeddings.embed_query(question)
         terms = query_topic_terms(question)
@@ -142,7 +159,11 @@ class RAGPipeline:
         # Lexikális találatoknak adjunk alap score-t a keyword_score alapján
         lexical_scored: list[VectorMatch] = []
         for item in coarse_lexical:
-            kw = keyword_score(question, f"{item.document_name} {item.text}")
+            kw = keyword_score(
+                question,
+                f"{item.document_name} {item.text}",
+                knowledge_profile=profile,
+            )
             if kw < 0.08 and not any(t in (item.document_name or "").lower() for t in terms):
                 continue
             lexical_scored.append(
@@ -160,7 +181,12 @@ class RAGPipeline:
             )
 
         route_pool = merge_candidates(coarse_vector, lexical_scored)
-        doc_ranked = rank_documents(route_pool, question, document_catalog=catalog)
+        doc_ranked = rank_documents(
+            route_pool,
+            question,
+            document_catalog=catalog,
+            learned_doc_boosts=learned,
+        )
         route_n = max(settings.doc_route_min_n, min(settings.doc_route_top_n, len(doc_ranked) or 1))
         # Ha a fájlnév erősen egyezik, tartsuk meg az összes ilyen dokumentumot (max route_n*2)
         strong = [d for d in doc_ranked if d[2] >= 0.35]
@@ -187,7 +213,11 @@ class RAGPipeline:
         )
         deep_lex_scored: list[VectorMatch] = []
         for item in deep_lexical:
-            kw = keyword_score(question, f"{item.document_name} {item.text}")
+            kw = keyword_score(
+                question,
+                f"{item.document_name} {item.text}",
+                knowledge_profile=profile,
+            )
             deep_lex_scored.append(
                 VectorMatch(
                     chunk_id=item.chunk_id,
@@ -206,13 +236,21 @@ class RAGPipeline:
         # Csak a routed dokumentumok chunkjai menjenek tovább (ne szivárogjon be irreleváns top globális)
         routed_set = set(routed_ids)
         candidates = [m for m in candidates if m.document_id in routed_set]
-        ranked = hybrid_rerank(question, candidates, top_k=max(k, per_doc))
+        # Agent isolation: csak saját agent_id chunkjai
+        candidates = [m for m in candidates if m.agent_id == agent_id]
+        ranked = hybrid_rerank(
+            question,
+            candidates,
+            top_k=max(k, per_doc),
+            knowledge_profile=profile,
+            learned_doc_boosts=learned,
+        )
         diversified = diversify_by_document(
             ranked,
             limit=k,
             max_per_doc=max(4, k // max(1, min(len(routed_ids), 4))),
         )
-        max_total = 40 if not is_detailed_question(question) else 48
+        max_total = 40 if not (profile == "rpg" and is_detailed_question(question)) else 48
         return self._expand_neighbors(diversified, window=1, max_total=max_total)
 
     def _expand_neighbors(
@@ -280,8 +318,14 @@ class RAGPipeline:
         question: str,
         agent_system_prompt: str = "",
         include_sources: bool = True,
+        knowledge_profile: str = "auto",
+        learn: bool = True,
     ) -> RAGResult:
-        matches = self.retrieve(agent_id=agent_id, question=question)
+        matches = self.retrieve(
+            agent_id=agent_id,
+            question=question,
+            knowledge_profile=knowledge_profile,
+        )
         if not matches:
             reply = no_info_reply(question)
             return RAGResult(answer=reply, sources=[], matches=[])
@@ -295,6 +339,14 @@ class RAGPipeline:
         settings = get_settings()
         draft = self._llm().generate(messages, temperature=settings.llm_temperature)
         answer = self._finalize_answer(question=question, draft=draft)
+        if learn and answer and "nem található megfelelő információ" not in answer.lower():
+            from app.rag.memory import get_retrieval_memory
+
+            get_retrieval_memory().learn_from_matches(
+                agent_id=agent_id,
+                question=question,
+                matches=matches,
+            )
         sources = self._sources(matches) if include_sources else []
         return RAGResult(answer=answer, sources=sources, matches=matches)
 
@@ -304,23 +356,17 @@ class RAGPipeline:
         agent_id: str,
         question: str,
         agent_system_prompt: str = "",
+        knowledge_profile: str = "auto",
     ):
         """Teljes válasz (polish után), majd streaming a UI-nak."""
-        matches = self.retrieve(agent_id=agent_id, question=question)
-        if not matches:
-            yield no_info_reply(question)
-            return
-        context = self.build_context(matches)
-        messages = build_messages(
+        result = self.answer(
+            agent_id=agent_id,
             question=question,
-            context=context,
             agent_system_prompt=agent_system_prompt,
-            has_context=True,
+            include_sources=False,
+            knowledge_profile=knowledge_profile,
         )
-        settings = get_settings()
-        draft = self._llm().generate(messages, temperature=settings.llm_temperature)
-        answer = self._finalize_answer(question=question, draft=draft)
-        # Chunkolt kiadás — a widget streamet vár
+        answer = result.answer
         step = 48
         for i in range(0, len(answer), step):
             yield answer[i : i + step]
@@ -332,6 +378,7 @@ class RAGPipeline:
         question: str,
         agent_system_prompt: str = "",
         include_sources: bool = True,
+        knowledge_profile: str = "auto",
     ) -> RAGResult:
         """Retrieve + generate + polish (stream nélküli teljes válasz)."""
         return self.answer(
@@ -339,6 +386,7 @@ class RAGPipeline:
             question=question,
             agent_system_prompt=agent_system_prompt,
             include_sources=include_sources,
+            knowledge_profile=knowledge_profile,
         )
 
     def _sources(self, matches: list[VectorMatch]) -> list[ChatSource]:

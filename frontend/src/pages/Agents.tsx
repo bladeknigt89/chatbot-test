@@ -7,6 +7,7 @@ export default function Agents() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [knowledgeProfile, setKnowledgeProfile] = useState<Agent["knowledge_profile"]>("auto");
   const [error, setError] = useState("");
 
   async function load() {
@@ -19,9 +20,15 @@ export default function Agents() {
 
   async function create(event: FormEvent) {
     event.preventDefault();
-    await api.createAgent({ name, description, status: "active" });
+    await api.createAgent({
+      name,
+      description,
+      status: "active",
+      knowledge_profile: knowledgeProfile || "auto",
+    });
     setName("");
     setDescription("");
+    setKnowledgeProfile("auto");
     await load();
   }
 
@@ -53,6 +60,19 @@ export default function Agents() {
           <label>
             Leírás
             <input value={description} onChange={(e) => setDescription(e.target.value)} />
+          </label>
+          <label>
+            Tudásprofil
+            <select
+              value={knowledgeProfile || "auto"}
+              onChange={(e) =>
+                setKnowledgeProfile(e.target.value as Agent["knowledge_profile"])
+              }
+            >
+              <option value="auto">auto (dokumentumokból)</option>
+              <option value="general">általános / egyetem / support</option>
+              <option value="rpg">szerepjáték / világkatalógus</option>
+            </select>
           </label>
           <button className="btn" type="submit">
             Agent létrehozása
