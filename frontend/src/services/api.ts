@@ -6,6 +6,13 @@ export type Agent = {
   status: string;
   show_sources: boolean;
   knowledge_profile?: "auto" | "general" | "rpg";
+  chat_log_enabled?: boolean;
+  chat_log_token?: boolean;
+  chat_log_ip?: boolean;
+  chat_log_client?: boolean;
+  chat_log_agent?: boolean;
+  chat_log_question?: boolean;
+  chat_log_answer?: boolean;
   widget_primary_color: string;
   widget_title: string;
   widget_position: string;
@@ -13,6 +20,22 @@ export type Agent = {
   created_at: string;
   updated_at: string;
   document_count: number;
+};
+
+export type ChatInteractionLog = {
+  id: string;
+  timestamp: string;
+  agent_id: string;
+  session_id: string;
+  auth_kind: string;
+  token_label: string;
+  api_key_id: string;
+  api_key_name: string;
+  ip: string | null;
+  client: string;
+  agent_name: string;
+  question: string;
+  answer: string;
 };
 
 export type DocumentItem = {
@@ -93,6 +116,8 @@ export const api = {
   revokeKey: (id: string) => request(`/api/keys/${id}/revoke`, { method: "POST" }),
   deleteKey: (id: string) => request(`/api/keys/${id}`, { method: "DELETE" }),
   logs: (params: URLSearchParams) => request<Array<Record<string, string>>>(`/api/logs?${params}`),
+  chatLogs: (params: URLSearchParams) =>
+    request<ChatInteractionLog[]>(`/api/chat-logs?${params}`),
   settings: () => request<Record<string, string | number | boolean>>("/api/settings"),
   saveSettings: (payload: Record<string, boolean>) =>
     request("/api/settings", { method: "PUT", body: JSON.stringify(payload) }),

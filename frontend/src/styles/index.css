@@ -122,6 +122,11 @@ label.checkbox-row input[type="checkbox"] {
   accent-color: var(--accent, #c45c26);
   flex: 0 0 auto;
 }
+label.checkbox-row:has(input:disabled) {
+  opacity: 0.55;
+  cursor: not-allowed;
+  background: #f3f1ec;
+}
 input, textarea, select {
   border: 1px solid var(--line);
   background: #fff;

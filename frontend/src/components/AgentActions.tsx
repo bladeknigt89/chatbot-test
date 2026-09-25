@@ -1,5 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import ChatLogToggles from "./ChatLogToggles";
+import { agentSettingsPayload } from "./agentPayload";
 import { Agent, api } from "../services/api";
 
 const STORAGE_PREFIX = "lac_agent_api_key:";
@@ -57,10 +59,13 @@ export default function AgentActions({ agent, onUpdated, compact }: Props) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
+  // Modal mentés után a szülő frissítheti az agent propot — ne írjuk felül a draftot.
   useEffect(() => {
-    setDraft(agent);
     setApiKey(savedKey(agent.id));
-  }, [agent]);
+    if (!propsOpen) {
+      setDraft(agent);
+    }
+  }, [agent, propsOpen]);
 
   const embedCode = useMemo(() => buildEmbedCode(draft, apiKey), [draft, apiKey]);
 
@@ -75,18 +80,8 @@ export default function AgentActions({ agent, onUpdated, compact }: Props) {
     setError("");
     setMessage("");
     try {
-      await api.updateAgent(agent.id, {
-        name: draft.name,
-        description: draft.description,
-        system_prompt: draft.system_prompt,
-        status: draft.status,
-        show_sources: draft.show_sources,
-        knowledge_profile: draft.knowledge_profile || "auto",
-        widget_primary_color: draft.widget_primary_color,
-        widget_title: draft.widget_title,
-        widget_position: draft.widget_position,
-        widget_welcome_message: draft.widget_welcome_message
-      });
+      const updated = await api.updateAgent(agent.id, agentSettingsPayload(draft));
+      setDraft(updated);
       setMessage("Chat tulajdonságok mentve.");
       onUpdated?.();
     } catch (err) {
@@ -216,6 +211,8 @@ export default function AgentActions({ agent, onUpdated, compact }: Props) {
                   <option value="rpg">szerepjáték / világkatalógus</option>
                 </select>
               </label>
+              <h3 style={{ marginTop: 8, marginBottom: 0 }}>Chat napló</h3>
+              <ChatLogToggles agent={draft} onChange={setDraft} />
               <label>
                 Státusz
                 <select value={draft.status} onChange={(e) => setDraft({ ...draft, status: e.target.value })}>

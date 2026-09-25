@@ -47,6 +47,13 @@ class Agent(Base):
     knowledge_profile: Mapped[str] = mapped_column(
         String(20), default="auto", nullable=False
     )
+    chat_log_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    chat_log_token: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    chat_log_ip: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    chat_log_client: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    chat_log_agent: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    chat_log_question: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    chat_log_answer: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     widget_primary_color: Mapped[str] = mapped_column(String(20), default="#2563eb")
     widget_title: Mapped[str] = mapped_column(String(200), default="")
     widget_position: Mapped[str] = mapped_column(String(20), default="right")
@@ -144,6 +151,30 @@ class AuditLog(Base):
     resource_id: Mapped[str] = mapped_column(String(64), default="", index=True)
     details: Mapped[str] = mapped_column(Text, default="")
     ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+
+class ChatInteractionLog(Base):
+    """Külön chat üzenetnapló — agentenként kapcsolható mezőkkel."""
+
+    __tablename__ = "chat_interaction_logs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    timestamp: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, index=True
+    )
+    agent_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("agents.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    session_id: Mapped[str] = mapped_column(String(36), default="", nullable=False, index=True)
+    auth_kind: Mapped[str] = mapped_column(String(20), default="", nullable=False)
+    token_label: Mapped[str] = mapped_column(String(160), default="", nullable=False)
+    api_key_id: Mapped[str] = mapped_column(String(36), default="", nullable=False)
+    api_key_name: Mapped[str] = mapped_column(String(200), default="", nullable=False)
+    ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    client: Mapped[str] = mapped_column(String(512), default="", nullable=False)
+    agent_name: Mapped[str] = mapped_column(String(200), default="", nullable=False)
+    question: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    answer: Mapped[str] = mapped_column(Text, default="", nullable=False)
 
 
 class SystemSetting(Base):

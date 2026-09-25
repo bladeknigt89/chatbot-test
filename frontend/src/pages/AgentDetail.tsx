@@ -1,6 +1,8 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import AgentActions from "../components/AgentActions";
+import ChatLogToggles from "../components/ChatLogToggles";
+import { agentSettingsPayload } from "../components/agentPayload";
 import DocumentDropzone from "../components/DocumentDropzone";
 import { DocumentStatus, isProcessingDoc } from "../components/DocumentStatus";
 import { Agent, DocumentItem, api } from "../services/api";
@@ -13,6 +15,8 @@ export default function AgentDetail() {
   const [sessionId, setSessionId] = useState<string>();
   const [chat, setChat] = useState<Array<{ role: string; text: string }>>([]);
   const [error, setError] = useState("");
+  const [saveMessage, setSaveMessage] = useState("");
+  const [saving, setSaving] = useState(false);
 
   async function load() {
     const [nextAgent, nextDocs] = await Promise.all([api.agent(id), api.agentDocuments(id)]);
@@ -20,13 +24,18 @@ export default function AgentDetail() {
     setDocs(nextDocs);
   }
 
+  async function refreshDocs() {
+    setDocs(await api.agentDocuments(id));
+  }
+
   useEffect(() => {
     load().catch((err) => setError(err.message));
   }, [id]);
 
+  // Csak a dokumentum státuszt polloljuk — az agent űrlapot ne írjuk felül szerkesztés közben.
   useEffect(() => {
     const busy = docs.some(isProcessingDoc);
-    const timer = setInterval(() => load().catch(() => undefined), busy ? 1500 : 4000);
+    const timer = setInterval(() => refreshDocs().catch(() => undefined), busy ? 1500 : 4000);
     return () => clearInterval(timer);
   }, [id, docs]);
 
@@ -38,8 +47,18 @@ export default function AgentDetail() {
   async function save(event: FormEvent) {
     event.preventDefault();
     if (!agent) return;
-    await api.updateAgent(agent.id, agent);
-    await load();
+    setSaving(true);
+    setSaveMessage("");
+    setError("");
+    try {
+      const updated = await api.updateAgent(agent.id, agentSettingsPayload(agent));
+      setAgent(updated);
+      setSaveMessage("Mentve.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Mentés sikertelen.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function upload(files: FileList) {
@@ -122,6 +141,16 @@ export default function AgentDetail() {
               <option value="rpg">szerepjáték / világkatalógus</option>
             </select>
           </label>
+          <h3>Chat napló</h3>
+          <ChatLogToggles
+            agent={agent}
+            onChange={(next) =>
+              setAgent((prev) => {
+                if (!prev) return prev;
+                return typeof next === "function" ? next(prev) : next;
+              })
+            }
+          />
           <h3>Chat tulajdonságok</h3>
           <label>
             Widget szín
@@ -159,8 +188,10 @@ export default function AgentDetail() {
               onChange={(e) => setAgent({ ...agent, widget_welcome_message: e.target.value })}
             />
           </label>
-          <button className="btn" type="submit">
-            Mentés
+          {error && <div className="error">{error}</div>}
+          {saveMessage && <div className="success">{saveMessage}</div>}
+          <button className="btn" type="submit" disabled={saving}>
+            {saving ? "Mentés…" : "Mentés"}
           </button>
         </form>
         <div className="card">

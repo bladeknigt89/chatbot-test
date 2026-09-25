@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.audit import write_audit
 from app.bootstrap import get_setting_bool
+from app.chat_logging import ChatLogPolicy, write_chat_interaction_log
 from app.config import get_settings
 from app.database import get_db, get_session_factory
 from app.deps import AuthContext, get_auth_context
@@ -95,6 +96,9 @@ def _catalog_response(
     answer: str,
     sources: list[ChatSource],
     stream: bool,
+    log_policy: ChatLogPolicy,
+    auth: AuthContext,
+    request: Request,
 ):
     if stream:
 
@@ -109,6 +113,15 @@ def _catalog_response(
                     user_message=question,
                     assistant_message=answer,
                     sources=sources,
+                )
+                write_chat_interaction_log(
+                    store_db,
+                    policy=log_policy,
+                    auth=auth,
+                    request=request,
+                    session_id=session_pk,
+                    question=question,
+                    answer=answer,
                 )
             finally:
                 store_db.close()
@@ -131,6 +144,15 @@ def _catalog_response(
         user_message=question,
         assistant_message=answer,
         sources=sources,
+    )
+    write_chat_interaction_log(
+        db,
+        policy=log_policy,
+        auth=auth,
+        request=request,
+        session_id=session_pk,
+        question=question,
+        answer=answer,
     )
     return ChatResponse(session_id=session_pk, message=answer, sources=sources)
 
@@ -211,6 +233,7 @@ def chat(
     agent_pk = agent.id
     agent_prompt = agent.system_prompt or ""
     agent_profile = getattr(agent, "knowledge_profile", None) or "auto"
+    log_policy = ChatLogPolicy.from_agent(agent)
     session_pk = session.id
     question = payload.message
     # Agent-szintű kapcsoló felülírja a kérés include_sources flagjét
@@ -236,6 +259,9 @@ def chat(
             answer=answer,
             sources=sources,
             stream=payload.stream,
+            log_policy=log_policy,
+            auth=auth,
+            request=request,
         )
 
     # RPG világ/rendszer katalógus: csak rpg (vagy auto→rpg) profilú agentnél
@@ -253,6 +279,9 @@ def chat(
             answer=answer,
             sources=sources,
             stream=payload.stream,
+            log_policy=log_policy,
+            auth=auth,
+            request=request,
         )
 
     pipeline = _pipeline()
@@ -284,6 +313,15 @@ def chat(
                         user_message=question,
                         assistant_message=answer,
                         sources=sources,
+                    )
+                    write_chat_interaction_log(
+                        store_db,
+                        policy=log_policy,
+                        auth=auth,
+                        request=request,
+                        session_id=session_pk,
+                        question=question,
+                        answer=answer,
                     )
                 finally:
                     store_db.close()
@@ -324,6 +362,15 @@ def chat(
         user_message=question,
         assistant_message=result.answer,
         sources=result.sources,
+    )
+    write_chat_interaction_log(
+        db,
+        policy=log_policy,
+        auth=auth,
+        request=request,
+        session_id=session_pk,
+        question=question,
+        answer=result.answer,
     )
     return ChatResponse(session_id=session_pk, message=result.answer, sources=result.sources)
 

@@ -25,6 +25,8 @@ def create_schema() -> None:
     _ensure_document_progress_column()
     _ensure_agent_show_sources_column()
     _ensure_agent_knowledge_profile_column()
+    _ensure_agent_chat_log_columns()
+    _ensure_chat_log_api_key_name_column()
 
 
 def _ensure_document_progress_column() -> None:
@@ -64,6 +66,45 @@ def _ensure_agent_knowledge_profile_column() -> None:
                 sa_text(
                     "ALTER TABLE agents ADD COLUMN knowledge_profile "
                     "VARCHAR(20) NOT NULL DEFAULT 'auto'"
+                )
+            )
+
+
+def _ensure_agent_chat_log_columns() -> None:
+    engine = get_engine()
+    with engine.begin() as conn:
+        rows = conn.execute(sa_text("PRAGMA table_info(agents)")).fetchall()
+        columns = {row[1] for row in rows}
+        defaults = {
+            "chat_log_enabled": "0",
+            "chat_log_token": "1",
+            "chat_log_ip": "1",
+            "chat_log_client": "1",
+            "chat_log_agent": "1",
+            "chat_log_question": "1",
+            "chat_log_answer": "1",
+        }
+        for name, default in defaults.items():
+            if name not in columns:
+                conn.execute(
+                    sa_text(
+                        f"ALTER TABLE agents ADD COLUMN {name} BOOLEAN NOT NULL DEFAULT {default}"
+                    )
+                )
+
+
+def _ensure_chat_log_api_key_name_column() -> None:
+    engine = get_engine()
+    with engine.begin() as conn:
+        rows = conn.execute(sa_text("PRAGMA table_info(chat_interaction_logs)")).fetchall()
+        if not rows:
+            return
+        columns = {row[1] for row in rows}
+        if "api_key_name" not in columns:
+            conn.execute(
+                sa_text(
+                    "ALTER TABLE chat_interaction_logs ADD COLUMN api_key_name "
+                    "VARCHAR(200) NOT NULL DEFAULT ''"
                 )
             )
 

@@ -31,6 +31,13 @@ class AgentCreate(BaseModel):
     status: Literal["active", "inactive"] = "active"
     show_sources: bool = True
     knowledge_profile: Literal["auto", "general", "rpg"] = "auto"
+    chat_log_enabled: bool = False
+    chat_log_token: bool = True
+    chat_log_ip: bool = True
+    chat_log_client: bool = True
+    chat_log_agent: bool = True
+    chat_log_question: bool = True
+    chat_log_answer: bool = True
     widget_primary_color: str = "#2563eb"
     widget_title: str = ""
     widget_position: Literal["right", "left"] = "right"
@@ -44,6 +51,13 @@ class AgentUpdate(BaseModel):
     status: Literal["active", "inactive"] | None = None
     show_sources: bool | None = None
     knowledge_profile: Literal["auto", "general", "rpg"] | None = None
+    chat_log_enabled: bool | None = None
+    chat_log_token: bool | None = None
+    chat_log_ip: bool | None = None
+    chat_log_client: bool | None = None
+    chat_log_agent: bool | None = None
+    chat_log_question: bool | None = None
+    chat_log_answer: bool | None = None
     widget_primary_color: str | None = None
     widget_title: str | None = None
     widget_position: Literal["right", "left"] | None = None
@@ -58,6 +72,13 @@ class AgentOut(ORMModel):
     status: str
     show_sources: bool = True
     knowledge_profile: str = "auto"
+    chat_log_enabled: bool = False
+    chat_log_token: bool = True
+    chat_log_ip: bool = True
+    chat_log_client: bool = True
+    chat_log_agent: bool = True
+    chat_log_question: bool = True
+    chat_log_answer: bool = True
     widget_primary_color: str
     widget_title: str
     widget_position: str
@@ -132,6 +153,22 @@ class AuditLogOut(ORMModel):
     resource_id: str
     details: str
     ip: str | None
+
+
+class ChatInteractionLogOut(ORMModel):
+    id: str
+    timestamp: datetime
+    agent_id: str
+    session_id: str
+    auth_kind: str
+    token_label: str
+    api_key_id: str
+    api_key_name: str = ""
+    ip: str | None
+    client: str
+    agent_name: str
+    question: str
+    answer: str
 
 
 class DashboardOut(BaseModel):
